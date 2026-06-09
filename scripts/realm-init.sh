@@ -6,11 +6,21 @@
 # ============================================
 set -e
 
+# 尝试从挂载的 .env 文件加载变量 (兼容 UGREEN NAS 等 Compose 变量替换受限的环境)
+if [ -f /env ]; then
+    echo ">> 从 /env 加载环境变量..."
+    set -a
+    . /env
+    set +a
+fi
+
 DB_HOST="${DB_HOST:-ac-database}"
 DB_USER="${DB_USER:-root}"
-DB_PASS="${DB_PASS:-wow@asm0x1}"
+# 兼容两种变量命名: DB_PASS (compose) / DOCKER_DB_ROOT_PASSWORD (.env)
+DB_PASS="${DB_PASS:-${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}}"
 REALM_IP="${REALM_IP:-127.0.0.1}"
-REALM_PORT="${REALM_PORT:-8085}"
+# 兼容两种变量命名: REALM_PORT (compose) / DOCKER_WORLD_EXTERNAL_PORT (.env)
+REALM_PORT="${REALM_PORT:-${DOCKER_WORLD_EXTERNAL_PORT:-8085}}"
 
 echo ">> 等待 worldserver 创建 realmlist 表..."
 

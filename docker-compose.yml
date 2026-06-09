@@ -84,6 +84,7 @@ services:
       REALM_PORT: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
+      - ./.env:/env:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
