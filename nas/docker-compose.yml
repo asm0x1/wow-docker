@@ -113,7 +113,6 @@ services:
       REALM_PORT: *REALM_PORT
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
-      - ./.env:/env:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -182,14 +181,11 @@ services:
     environment:
       REALM_IP: *REALM_IP
       REG_PORT: *REG_PORT
-    volumes:
-      - ./.env:/env:ro
     depends_on:
       ac-realm-init:
         condition: service_completed_successfully
     command: >
       sh -c "
-      [ -f /env ] && . /env;
       envsubst '$$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
       apache2-foreground
       "
