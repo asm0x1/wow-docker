@@ -7,11 +7,16 @@
 set -e
 
 # 尝试从挂载的 .env 文件加载变量 (兼容 UGREEN NAS 等 Compose 变量替换受限的环境)
-if [ -f /nas-project/.env ]; then
-    echo ">> 从 /nas-project/.env 加载环境变量..."
+if [ -f /env ]; then
+    echo ">> 从 /env 加载环境变量..."
     set -a
-    . /nas-project/.env
+    . /env
     set +a
+elif [ -d /env ]; then
+    echo "!! 错误: /env 是一个目录而不是文件！"
+    echo "!! 原因: 部署时 .env 文件不存在，Docker 自动创建了同名目录。"
+    echo "!! 修复: 删除 .env 目录，创建 .env 文件后重新部署。"
+    echo "!! 将使用 Compose 传入的默认值继续..."
 fi
 
 DB_HOST="${DB_HOST:-ac-database}"
