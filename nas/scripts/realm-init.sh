@@ -18,7 +18,14 @@ DB_HOST="${DB_HOST:-ac-database}"
 DB_USER="${DB_USER:-root}"
 # 兼容两种变量命名: DB_PASS (compose) / DOCKER_DB_ROOT_PASSWORD (.env)
 DB_PASS="${DB_PASS:-${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}}"
+
+# 优先从配置文件读取 REALM_IP (兼容 UGREEN 等不支持 Compose 变量替换的环境)
+if [ -f /etc/wow/realm-ip.conf ]; then
+    REALM_IP=$(head -1 /etc/wow/realm-ip.conf | tr -d ' \n')
+    echo ">> 从配置文件读取 REALM_IP: ${REALM_IP}"
+fi
 REALM_IP="${REALM_IP:-127.0.0.1}"
+
 # 兼容两种变量命名: REALM_PORT (compose) / DOCKER_WORLD_EXTERNAL_PORT (.env)
 REALM_PORT="${REALM_PORT:-${DOCKER_WORLD_EXTERNAL_PORT:-8085}}"
 

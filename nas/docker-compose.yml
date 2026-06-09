@@ -96,6 +96,7 @@ services:
       REALM_PORT: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
+      - ./.env:/env:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -160,16 +161,15 @@ services:
     restart: unless-stopped
     ports:
       - ${DOCKER_REGISTRATION_EXTERNAL_PORT:-8765}:80
-    # 如需修改 SMTP 邮箱配置，取消下面注释并挂载配置文件:
-    # volumes:
-    #   - ./WoWRegistration/application/config/config.php:/var/www/html/application/config/config.php
-    environment:
-      - REALM_IP=${REALM_IP:-127.0.0.1}
+    volumes:
+      - ./.env:/env:ro
     depends_on:
       ac-realm-init:
         condition: service_completed_successfully
     command: >
       sh -c "
+      [ -f /env ] && . /env;
+      export REALM_IP=\"\${REALM_IP:-127.0.0.1}\";
       envsubst '\$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
       apache2-foreground
       "
