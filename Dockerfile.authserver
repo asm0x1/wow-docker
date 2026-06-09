@@ -22,6 +22,9 @@ COPY lib/ /opt/wow/lib/
 COPY authserver.conf /opt/wow/etc/authserver.conf.template
 
 # 创建 Synology 路径符号链接 (二进制硬编码了这些路径)
+# 复制数据库迁移脚本 (供 authserver 依赖的数据库路径)
+COPY database/ /opt/wow/database/
+
 RUN ln -sf /opt/wow/etc /var/packages/WoWServer/target/etc && \
     ln -sf /opt/wow/database /var/packages/WoWServer/target/database && \
     chown -Rh wow:wow /opt/wow /var/packages/WoWServer

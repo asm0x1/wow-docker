@@ -18,4 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
+# 复制 Web 注册应用 (含 SMTP/2FA 配置)
+COPY WoWRegistration/ /var/www/html/
+
 WORKDIR /var/www/html

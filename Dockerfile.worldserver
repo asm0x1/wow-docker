@@ -36,6 +36,9 @@ COPY conf/modules/ /opt/wow/etc/modules/
 # 复制 Lua 脚本
 COPY scripts/lua/ /opt/wow/lua_scripts/
 
+# 复制数据库迁移脚本 (供 worldserver 启动时执行 SQL 迁移)
+COPY database/ /opt/wow/database/
+
 # 创建 Synology 路径符号链接 (二进制硬编码了这些路径)
 RUN ln -sf /opt/wow/etc /var/packages/WoWServer/target/etc && \
     ln -sf /opt/wow/database /var/packages/WoWServer/target/database && \

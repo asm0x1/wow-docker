@@ -11,7 +11,7 @@ use SebastianBergmann\Timer\Timer;
 ?>
 <div class="row">
     <div class="text-center box1">
-        本服务由群晖NAS提供 asm0x1提取编译
+        本服务由群晖NAS提供
         - <?php echo "Load " . Timer::resourceUsage(); ?>
     </div>
 </div>

@@ -5,10 +5,11 @@
 # ============================================
 #
 # 部署方式 (绿联 Docker 管理界面):
-#   项目文件夹: /volume1/docker/wow-docker/ (仓库根目录)
-#   .env 文件:  放在仓库根目录 (复制 nas/.env.dist 改名为 .env)
-#   data 目录:  将客户端地图数据放入仓库根目录的 data/ 下
+#   项目文件夹: 指向本 nas/ 目录
+#   .env 文件:  复制 .env.dist 为 .env 并修改
+#   数据目录:   将客户端地图放入 nas/data/ 下
 #
+#   所有镜像从 Docker Hub 自动拉取，无需构建。
 # ============================================
 
 services:
@@ -42,12 +43,10 @@ services:
     #       memory: 1G
 
   # ============================================
-  # 世界服务器 (x86_64 原生运行)
+  # 世界服务器 (预构建镜像，从 Docker Hub 拉取)
   # ============================================
   ac-worldserver:
-    build:
-      context: .
-      dockerfile: Dockerfile.worldserver
+    image: asm0x1/wow-worldserver:latest
     container_name: acore-worldserver
     restart: unless-stopped
     stdin_open: true
@@ -67,9 +66,6 @@ services:
       BOT_HORDE_RATIO: ${BOT_HORDE_RATIO:-50}
     volumes:
       - acore-logs:/opt/wow/logs
-      - ./scripts/lua:/opt/wow/lua_scripts:ro
-      - ./database:/opt/wow/database:ro
-      - ./conf/modules:/opt/wow/etc/modules
       - ./data:/opt/wow/data:ro
     depends_on:
       ac-database:
@@ -134,12 +130,10 @@ services:
     restart: "no"
 
   # ============================================
-  # 认证服务器
+  # 认证服务器 (预构建镜像，从 Docker Hub 拉取)
   # ============================================
   ac-authserver:
-    build:
-      context: .
-      dockerfile: Dockerfile.authserver
+    image: asm0x1/wow-authserver:latest
     container_name: acore-authserver
     restart: unless-stopped
     stdin_open: true
@@ -150,7 +144,6 @@ services:
       DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
     volumes:
       - acore-logs:/opt/wow/logs
-      - ./database:/opt/wow/database:ro
     depends_on:
       ac-database:
         condition: service_healthy
@@ -160,18 +153,17 @@ services:
       - ac-network
 
   # ============================================
-  # Web 注册页面
+  # Web 注册页面 (预构建镜像，从 Docker Hub 拉取)
   # ============================================
   ac-registration:
-    build:
-      context: .
-      dockerfile: Dockerfile.registration
+    image: asm0x1/wow-registration:latest
     container_name: acore-registration
     restart: unless-stopped
     ports:
       - ${DOCKER_REGISTRATION_EXTERNAL_PORT:-8765}:80
-    volumes:
-      - ./WoWRegistration:/var/www/html
+    # 如需修改 SMTP 邮箱配置，取消下面注释并挂载配置文件:
+    # volumes:
+    #   - ./WoWRegistration/application/config/config.php:/var/www/html/application/config/config.php
     environment:
       - REALM_IP=${REALM_IP:-127.0.0.1}
     depends_on:
@@ -187,24 +179,22 @@ services:
 
   # ============================================
   # phpMyAdmin (可选管理工具)
-  # 在 compose 中添加此服务即可启用
+  # 取消下面注释即可启用
   # ============================================
-  phpmyadmin:
-    image: phpmyadmin
-    ports:
-      - 8081:80
-    environment:
-      - PMA_ARBITRARY=1
-      - PMA_HOST=ac-database
-      - PMA_USER=root
-      - PMA_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
-    depends_on:
-      ac-database:
-        condition: service_healthy
-    networks:
-      - ac-network
-    profiles:
-      - management
+  # phpmyadmin:
+  #   image: phpmyadmin
+  #   ports:
+  #     - 8081:80
+  #   environment:
+  #     - PMA_ARBITRARY=1
+  #     - PMA_HOST=ac-database
+  #     - PMA_USER=root
+  #     - PMA_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+  #   depends_on:
+  #     ac-database:
+  #       condition: service_healthy
+  #   networks:
+  #     - ac-network
 
 networks:
   ac-network:
