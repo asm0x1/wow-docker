@@ -1,145 +1,192 @@
-# See https://docs.docker.com/reference/compose-file/extension
-x-networks: &networks
-  networks:
-    - ac-network
-
-x-ac-shared-conf: &ac-shared-conf
-  <<: *networks
-  working_dir: /azerothcore
-  depends_on:
-    ac-database:
-      condition: service_healthy
+# ============================================
+# AzerothCore WotLK 3.3.5a Docker Compose
+# 从群晖 SPK WoWServer v1.0.52 迁移
+# Author: asm0x1
+# ============================================
 
 services:
+  # ============================================
+  # MariaDB 10.11 数据库 (SPK 二进制链接 libmariadb)
+  # ============================================
   ac-database:
-    <<: *networks
-    image: mysql:8.0
+    image: mariadb:10.11
+    container_name: acore-database
     restart: unless-stopped
     cap_add:
-      - SYS_NICE # CAP_SYS_NICE
+      - SYS_NICE
     ports:
       - ${DOCKER_DB_EXTERNAL_PORT:-63306}:3306
-    expose:
-      - 3306
     environment:
-      - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
+      MARIADB_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
     volumes:
-      - type: volume
-        source: ac-database
-        target: /var/lib/mysql
+      - ac-database-data:/var/lib/mysql
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: '/usr/bin/mysql --user=root --password=$$MYSQL_ROOT_PASSWORD --execute "SHOW DATABASES;"'
-      interval: 2s
+      test: '/usr/bin/mariadb --user=root --password=$$MARIADB_ROOT_PASSWORD --execute "SHOW DATABASES;"'
+      interval: 5s
       timeout: 40s
       retries: 20
+    networks:
+      - ac-network
 
+  # ============================================
+  # 世界服务器 - 先启动以创建数据库表结构
+  # (worldserver 启动时会自动运行 DB migrations)
+  # ============================================
   ac-worldserver:
-    container_name: acore-docker-ac-worldserver-1 # fixed container name to simplify the attach process
-    <<: *ac-shared-conf
+    build:
+      context: .
+      dockerfile: Dockerfile.worldserver
+    container_name: acore-worldserver
+    restart: unless-stopped
     stdin_open: true
     tty: true
     cap_add:
-      - SYS_NICE # CAP_SYS_NICE
-    image: acore/ac-wotlk-worldserver:${DOCKER_IMAGE_TAG:-master}
-    restart: unless-stopped
-    privileged: true
-    user: ${DOCKER_USER:-acore}
+      - SYS_NICE
     ports:
       - ${DOCKER_WORLD_EXTERNAL_PORT:-8085}:8085
       - ${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
-    expose:
-      - 8085
-    volumes:
-      - ./scripts/lua:/azerothcore/env/dist/bin/lua_scripts/scripts
-      - "${DOCKER_VOL_CLIENT_DATA:-ac-client-data}:/azerothcore/env/dist/data:ro"
-
     environment:
-      AC_DATA_DIR: "/azerothcore/env/dist/data"
-      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
-      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
-      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
-      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
-      AC_CLOSE_IDLE_CONNECTIONS: "0"
+      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+    volumes:
+      - acore-logs:/opt/wow/logs
+      - ./scripts/lua:/opt/wow/lua_scripts:ro
+      - ./database:/opt/wow/database:ro
+      - ./conf/modules:/opt/wow/etc/modules:ro
+      - ${DOCKER_CLIENT_DATA_PATH:-./data}:/opt/wow/data:ro
     depends_on:
-      ac-eluna-ts-dev:
-        condition: service_started
-      ac-client-data:
-        condition: service_completed_successfully
-      ac-db-import:
-        condition: service_completed_successfully
+      ac-database:
+        condition: service_healthy
+    networks:
+      - ac-network
 
+  # ============================================
+  # 设置 Realm 地址 (等待 worldserver 创建 realmlist 表后更新)
+  # ============================================
+  ac-realm-init:
+    image: mariadb:10.11
+    container_name: acore-realm-init
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-worldserver:
+        condition: service_started
+    environment:
+      DB_HOST: ac-database
+      DB_USER: root
+      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      REALM_IP: ${REALM_IP:-127.0.0.1}
+      REALM_PORT: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
+    volumes:
+      - ./scripts/realm-init.sh:/realm-init.sh:ro
+    entrypoint: ["bash", "/realm-init.sh"]
+    networks:
+      - ac-network
+    restart: "no"
+
+  # ============================================
+  # 创建默认管理员账户 (等待 worldserver 完成迁移后)
+  # ============================================
+  ac-account-init:
+    image: python:3.11-alpine
+    container_name: acore-account-init
+    depends_on:
+      ac-database:
+        condition: service_healthy
+      ac-realm-init:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: ac-database
+      DB_USER: root
+      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      DB_NAME: acore_auth
+      DEFAULT_ACCOUNT_USER: ${DEFAULT_ACCOUNT_USER}
+      DEFAULT_ACCOUNT_PASS: ${DEFAULT_ACCOUNT_PASS}
+      DEFAULT_ACCOUNT_GMLEVEL: ${DEFAULT_ACCOUNT_GMLEVEL:-3}
+      DEFAULT_ACCOUNT_EXPANSION: ${DEFAULT_ACCOUNT_EXPANSION:-2}
+    volumes:
+      - ./scripts/create-default-account.py:/create-account.py:ro
+    entrypoint: ["sh", "-c", "pip install -q pymysql && python /create-account.py"]
+    networks:
+      - ac-network
+    restart: "no"
+
+  # ============================================
+  # 认证服务器 (SPK authserver)
+  # ============================================
   ac-authserver:
-    <<: *ac-shared-conf
-    tty: true
-    image: acore/ac-wotlk-authserver:${DOCKER_IMAGE_TAG:-master}
+    build:
+      context: .
+      dockerfile: Dockerfile.authserver
+    container_name: acore-authserver
     restart: unless-stopped
+    stdin_open: true
+    tty: true
     ports:
       - ${DOCKER_AUTH_EXTERNAL_PORT:-3724}:3724
-    expose:
-      - 3724
     environment:
-      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
-      AC_TEMP_DIR: "/azerothcore/env/dist/temp"
-      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
-      AC_SQLDRIVER_LOG_FILE: "SQLDriver.log"
-      AC_SQLDRIVER_QUERY_LOGGING: "1"
+      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+    volumes:
+      - acore-logs:/opt/wow/logs
+      - ./database:/opt/wow/database:ro
     depends_on:
       ac-database:
         condition: service_healthy
-      ac-db-import:
+      ac-realm-init:
         condition: service_completed_successfully
+    networks:
+      - ac-network
 
-  ac-eluna-ts-dev:
-    image: acore/eluna-ts:master
-    # the build:lib is done in the healthcheck
-    command: sh -c "cd /eluna-ts/modules && touch index.ts && npm install && cd /eluna-ts && npm run dev"
-    # small workaround to make the other services to wait for the eluna-ts build
-    healthcheck:
-      test: sh -c "cd /eluna-ts/modules/eluna-ts && npm run build:lib && npm run build"
-      timeout: 60s
-      retries: 10
-      interval: 5s
-      start_period: 10s
+  # ============================================
+  # Web 注册页面 (WoWSimpleRegistration)
+  # ============================================
+  ac-registration:
+    build:
+      context: .
+      dockerfile: Dockerfile.registration
+    container_name: acore-registration
     restart: unless-stopped
+    ports:
+      - ${DOCKER_REGISTRATION_EXTERNAL_PORT:-8765}:80
     volumes:
-      # from typescript
-      - ./scripts/typescript:/eluna-ts/modules
-      # to lua
-      - ./scripts/lua:/eluna-ts/dist/
-
-  ac-client-data:
-    <<: *networks
-    image: acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}
-    volumes:
-      - "${DOCKER_VOL_CLIENT_DATA:-ac-client-data}:/azerothcore/env/dist/data"
-
-  ac-db-import:
-    <<: *ac-shared-conf
-    image: acore/ac-wotlk-db-import:${DOCKER_IMAGE_TAG:-master}
+      - ./WoWRegistration:/var/www/html
     environment:
-      AC_DISABLE_INTERACTIVE: "1"
-      AC_DATA_DIR: "/azerothcore/env/dist/data"
-      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
-      AC_LOGIN_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_auth"
-      AC_WORLD_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_world"
-      AC_CHARACTER_DATABASE_INFO: "ac-database;3306;root;${DOCKER_DB_ROOT_PASSWORD:-password};acore_characters"
-      AC_CLOSE_IDLE_CONNECTIONS: "0"
+      - REALM_IP=${REALM_IP:-127.0.0.1}
     depends_on:
-      ac-database:
-        condition: service_healthy
+      ac-realm-init:
+        condition: service_completed_successfully
+    command: >
+      sh -c "
+      envsubst '\$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
+      apache2-foreground
+      "
+    networks:
+      - ac-network
 
+  # ============================================
+  # phpMyAdmin (可选: docker compose --profile management up -d)
+  # ============================================
   phpmyadmin:
-    <<: *networks
     image: phpmyadmin
     ports:
-      - 8080:80
+      - 8081:80
     environment:
       - PMA_ARBITRARY=1
-    profiles: []
-
-volumes:
-  ac-database:
-  ac-client-data:
+      - PMA_HOST=ac-database
+      - PMA_USER=root
+      - PMA_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+    depends_on:
+      ac-database:
+        condition: service_healthy
+    networks:
+      - ac-network
+    profiles:
+      - management
 
 networks:
   ac-network:
+    driver: bridge
+
+volumes:
+  ac-database-data:
+  acore-logs:

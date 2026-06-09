@@ -1,0 +1,11 @@
+# Docker build ignore - 排除大文件和源码
+data/
+database/
+*.md
+.git/
+backups/
+var/
+.DS_Store
+*.spk
+*.tgz
+*.tar.gz

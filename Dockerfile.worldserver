@@ -1,0 +1,54 @@
+# ============================================
+# AzerothCore Worldserver Dockerfile
+# 基于群晖 SPK WoWServer v1.0.52 二进制构建
+# Author: asm0x1
+# ============================================
+FROM ubuntu:22.04
+
+# 防止交互式提示
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmysqlclient21 \
+    mariadb-client \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建 wow 用户和目录
+RUN useradd -m -s /bin/bash wow && \
+    mkdir -p /opt/wow/bin /opt/wow/lib /opt/wow/etc/modules \
+    /opt/wow/logs /opt/wow/lua_scripts /opt/wow/data /opt/wow/temp && \
+    mkdir -p /var/packages/WoWServer/target
+
+# 复制 SPK 二进制
+COPY bin/worldserver /opt/wow/bin/worldserver
+COPY bin/lua52_compiler /opt/wow/bin/lua52_compiler
+COPY bin/lua52_interpreter /opt/wow/bin/lua52_interpreter
+
+# 复制 SPK 动态库
+COPY lib/ /opt/wow/lib/
+
+# 复制配置（含 __DB_PASSWORD__ 占位符）
+COPY worldserver.conf /opt/wow/etc/worldserver.conf.template
+COPY conf/modules/ /opt/wow/etc/modules/
+
+# 复制 Lua 脚本
+COPY scripts/lua/ /opt/wow/lua_scripts/
+
+# 创建 Synology 路径符号链接 (二进制硬编码了这些路径)
+RUN ln -sf /opt/wow/etc /var/packages/WoWServer/target/etc && \
+    ln -sf /opt/wow/database /var/packages/WoWServer/target/database && \
+    chown -Rh wow:wow /opt/wow /var/packages/WoWServer
+
+# 入口脚本
+COPY entrypoint-worldserver.sh /opt/wow/entrypoint.sh
+RUN chmod +x /opt/wow/entrypoint.sh
+
+# 设置库路径
+ENV LD_LIBRARY_PATH=/opt/wow/lib
+
+WORKDIR /opt/wow
+USER wow
+
+ENTRYPOINT ["/opt/wow/entrypoint.sh"]

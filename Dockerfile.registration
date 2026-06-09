@@ -1,0 +1,21 @@
+# ============================================
+# WoWSimpleRegistration Dockerfile
+# 基于 php:8.2-apache，预编译 GD/GMP/PDO_MySQL
+# Author: asm0x1
+# ============================================
+FROM php:8.2-apache
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgmp-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    gettext-base \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install gd gmp pdo_mysql \
+    && a2enmod rewrite \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/www/html

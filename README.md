@@ -1,286 +1,270 @@
-# ACore docker compose
+# AzerothCore Docker - 魔兽世界 3.3.5a 服务端
 
-<img src="https://www.azerothcore.org/images/logo.png" alt="logo" width="200"/>
+改编自群晖 DSM 套件版 (WoWServer v1.0.52)，将 SPK 预编译二进制打包为 Docker 容器。
+**非源码编译** — 使用群晖 SPK 提取的 x86_64 二进制，Ubuntu 22.04 运行。
 
-* Table of Contents
-{:toc}
+> Author: asm0x1
 
-Video Demo:
+## 快速开始
 
-[![ACore Docker Demonstration](https://img.youtube.com/vi/ldDkI2R431k/0.jpg)](https://www.youtube.com/watch?v=ldDkI2R431k)
+```bash
+# 1. 复制并编辑 .env 文件
+cp conf/dist/.env .env
+# 修改 REALM_IP 为你的本机 IP
+#   macOS:  ipconfig getifaddr en0
+#   Linux:  hostname -I
 
-The docker compose file included in this folder provides an easy way to use the azerothcore images available on [docker hub](https://hub.docker.com/u/acore) .
-It means that you will be able to run a clean azerothcore server without installing anything but docker.
+# 2. Apple Silicon Mac 必须设置 (Intel Mac 跳过)
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
-NOTE: You can re-use this docker compose configuration inside another project to test AzerothCore together
-with another application, for instance an API or a website based on docker compose.
-
-The original repository with the sources and the workflows to generate the images used by this docker compose is available [here](https://github.com/azerothcore/azerothcore-wotlk)
-
-Do you have any questions? Open an [issue here](https://github.com/azerothcore/acore-docker/issues)
-
-## Requirements
-
-* [Docker](https://docs.docker.com/get-docker/)
-* [Git](https://git-scm.com/downloads) to clone our repo (suggested), otherwise you can manually [download it](https://github.com/azerothcore/acore-docker/archive/refs/heads/master.zip)
-
-## Getting started
-
-First of all, download or clone [this repository](https://github.com/azerothcore/acore-docker).
-If you want to clone the repo you have to open a terminal and run this command: **git clone https://github.com/azerothcore/acore-docker**
-
-To open a terminal inside a specific folder in your operating system check [this interesting article](https://www.groovypost.com/howto/open-command-window-terminal-window-specific-folder-windows-mac-linux/)
-
-Now run this magic command sequence inside the downloaded folder to have everything up and running (with an interactive worldserver terminal): 
-
-```Bash
-docker compose up
-```
-
-**Wait for few minutes and you have an up and running AzerothCore!**
-
- The first installation will take a while because it needs to download the images from the docker hub and create the entire database before running the server**
- 
- ⚠️ WARNING ⚠️: if you encounter the error `ERROR: for ac-worldserver Container "abcdefg12345" exited with code 1.` or `ERROR: 'network_mode' and 'networks' cannot be combined` please update docker and docker-compose to the latest version.
-
-### How to run in background
-
-If you need to run them in background instead you can use the following command:
-
-```Bash
+# 3. 启动全部服务
 docker compose up -d
 ```
 
-**IMPORTANT:** 
+首次启动 worldserver 会自动执行数据库迁移和 playerbots 表初始化，等待约 1-2 分钟。
 
-* If the application crashes, docker will automatically restart the container for you
+启动后访问：
+| 端口 | 服务 |
+|------|------|
+| 3724 | 游戏登录 (authserver) |
+| 8085 | 游戏世界 (worldserver) |
+| 8765 | Web 注册页面 |
+| 7878 | SOAP 远程管理 |
+| 63306 | MariaDB (外部连接) |
+| 8081 | phpMyAdmin (`--profile management`) |
 
-## Access the worldserver console and create an account
+默认管理员账号：`asm0x1` / `123456`（GM Level 3，由 `.env` 中的 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 配置）
 
-With **docker compose up** we have an up and running worldserver as well, but you need to access its interactive shell to
-run commands on the worldserver.
-
-
-Open another terminal and use this command to access the worldserver console
-
-```Bash
-docker attach acore-docker-ac-worldserver-1
-```
-
-Now you can use the worlserver console to run azerothcore commands.
-
-To create an account you can use: `account create <user> <password> <confirm password>`
-
-NOTE: you can detach from a container and leave it running using the CTRL-p CTRL-q key sequence.
-
-The list of GM commands is available [here](https://www.azerothcore.org/wiki/GM-Commands)
-
-Do you need a **game client**? check [this page](https://www.azerothcore.org/wiki/client-setup)! 
-
-
-**IMPORTANT** to read the list of all the containers you can attach to, run the `docker ps` command.
-
-## Ask for support
-
-If you need support about the docker installation, use one of the following channels:
-
-* Join our discord community: https://discord.gg/mMgdcx37bA 
-* Report an issue on github: https://github.com/azerothcore/acore-docker/issues
-
-If your issue is about the server or you want to report a bug, check our page on [How to ask for help](https://www.azerothcore.org/wiki/how-to-ask-for-help)
-
-
-## Stop or restart the services
-
-There are several commands to stop or restart the services, depending on your needs:
-
-* **docker compose ps**: list all the running containers
-* **docker compose stop** : just stops the current running services
-* **docker compose restart** : restarts the current running services
-* **docker compose down --remove-orphans** : stops and removes the containers.
-* **docker compose down --rmi all -v --remove-orphans** : ⚠️ stops, removes, and deletes EVERYTHING. Including the volumes with the associated database ⚠️
-
-## Update your services with latest images
-
-You just need to combine the following commands:
-
-```Bash
-docker compose down
-docker compose pull
-docker compose rm -s -v -f ac-client-data
-```
-
-**NOTE:** `docker compose rm -s -v -f ac-client-data` is used to recreate the client data volume with the newest files. 
-If you're using your own maps, you should not use this command and regenerate the maps by your own instead (read the paragraph below)
-
-## Dev server
-
-The ac-dev-server is a special container that provides a complete workspace that includes all the sources and dependencies to build your own server.
-The container of the ac-dev-server is an isolated instance, it doesn't expose any file with the host and all the changes are stored into a docker volume.
-This image is intended to be used together with the [VSCode Docker extension](https://code.visualstudio.com/docs/containers/overview).
-
-The quickest way to access and work with the ac-dev-server is the following:
-
-1. Run this command to stop all the containers: `docker compose down`
-
-2. Install [visual studio code](https://code.visualstudio.com/) and the [Remote Development extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack)
-    
-
-3. Start VS Code in the acore-docker folder, run the `Dev Containers: Reopen in container...` command from the Command Palette (F1) or quick actions Status bar item (green button on the bottom left of your screen)
-
-    ![Screen](https://code.visualstudio.com/assets/docs/remote/common/remote-dev-status-bar.png)
-
-4. Once inside the container open a vscode terminal and run this command 
-
-   ```bash
-      git config --global --add safe.directory '*' && git reset --hard && git pull origin master
-   ``` 
-
-   You will notice that the file list available in VSCode is basically the [azerothcore-wotlk](https://github.com/azerothcore/azerothcore-wotlk) repository.
-5. Now you can start working with the azerothcore sources into a pre-configured ubuntu environment with all the dependencies pre-installed
-6. To build and run your server run `./acore.sh compiler build` command. You can refer to [this guide](https://www.azerothcore.org/wiki/ac-dashboard-core-installation) at the paragraph "Build everything from scratch".
-7. Once it's done you can download the client data by executing this command: `./acore.sh client data`
-8. Finally you should be ready to run the authserver and the worldserver available inside the `env/dist/bin` folder. You can also use the restarters
-   available in the `./acore.sh` dashboard
-
-IMPORTANT: 
-
-* This container uses a different instance of the mysql database. It means that you won't have, by default, the same data available on the `ac-authserver` and `ac-worldserver` services
-
-* The dev-server docker compose exposes the following ports: 3724 (authserver), 8085 (worldserver), 7878 (soap service)
-
-* To share files between your host and the dev-server you can use the `var/shared` folder
-
-* This dev-container includes all the tools needed to build the AC without configure anything. Look around and play with the vscode workspace to discover all the features available.
-
-* if you have any file permission issues once inside the container, please run this command: 
-`sudo chown acore:acore -R .`
-
-
-## Customize your server
-
-*NOTE: to unlock 100% power of AzerothCore, please use the [main repo](https://github.com/azerothcore/azerothcore-wotlk) and [compile it by your self](https://www.azerothcore.org/wiki/Installation)!*
-
-Despite using the [GM commands](https://www.azerothcore.org/wiki/GM-Commands) to operate within the CLI or in game, you have the flexibility to extend/configure
-your server with the following techniques:
-
-
-### Change your docker configurations with the environment variables
-
-Within the **/conf/dist** folder you can find a sample of the **.env** file which you can copy inside the root folder of this project to 
-change certain **docker compose** configurations, such as changing the ports of your docker services or the volumes path etc.
-
-Check the comments inside that file to understand how to use those variables.
-### Extends the default docker compose
-
-With the combination of the [docker compose.override](https://docs.docker.com/compose/extends/) and the environment variables available to configure
-the AzerothCore project, you can extend this docker by adding external and shared volumes, change configurations and even add multiple realms.
-
-### How to create a second multirealm environment
-
-Check the /conf/dist folder that contains an override file ready to be used to implement a secondary worldserver. Just copy-paste this file in the same folder of the `docker-compose.yml`
-
-You also need to create a `worldserver2.conf` file under the `conf/` folder. You can do that by running this command:
-
-```docker compose cp ac-worldserver:/azerothcore/env/dist/etc/worldserver.conf conf/worldserver2.conf```
-
-Create the following configurations inside the worldserver2.conf:
+## 服务架构
 
 ```
-RealmID = 2
-LoginDatabaseInfo     = "ac-database;3306;root;password;acore_auth"
-WorldDatabaseInfo     = "ac-database;3306;root;password;acore_world2"
-CharacterDatabaseInfo = "ac-database;3306;root;password;acore_characters2"
+ac-database (MariaDB 10.11)
+  ├─► ac-worldserver (数据库迁移 + 游戏世界)
+  │     └─► ac-realm-init (一次性：更新 realmlist 地址/端口)
+  │           ├─► ac-authserver (认证服务器)
+  │           ├─► ac-registration (Web 注册，PHP 8.2 + WoWSimpleRegistration)
+  │           └─► ac-account-init (一次性：SRP6 创建默认管理员)
+  └─► phpmyadmin (可选，--profile management)
 ```
 
-Finally you need to access your database and change the ```acore_auth.realmlist``` table by adding a second realm with the port ```8086```
+## 环境变量
 
-Now you can restart your containers by running:
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| **REALM_IP** | 127.0.0.1 | **本机 IP（必改）** |
+| **DEFAULT_ACCOUNT_USER** | - | 默认管理员用户名 |
+| **DEFAULT_ACCOUNT_PASS** | - | 默认管理员密码 |
+| DEFAULT_ACCOUNT_GMLEVEL | 3 | 默认管理员 GM 等级 |
+| DEFAULT_ACCOUNT_EXPANSION | 2 | 默认账号资料片 (0=经典/1=TBC/2=WotLK) |
+| DOCKER_CLIENT_DATA_PATH | ./data | 客户端地图数据路径 |
+| DOCKER_WORLD_EXTERNAL_PORT | 8085 | 世界服务器端口 |
+| DOCKER_AUTH_EXTERNAL_PORT | 3724 | 认证服务器端口 |
+| DOCKER_REGISTRATION_EXTERNAL_PORT | 8765 | Web 注册页面端口 |
+| DOCKER_DB_EXTERNAL_PORT | 63306 | MariaDB 外部端口 |
+| DOCKER_DB_ROOT_PASSWORD | wow@asm0x1 | MariaDB root 密码 |
 
-```
-docker compose down
-docker compose up
-```
+## 实用命令
 
-### Changing your server configurations
+### 服务管理
 
-To change the `*.conf` files of your server you need to extract them from the container and then create a volume to re-inject the modified file
-into the container again.
-
-To do this you can use these commands to copy the files from the container to your conf folder:
-
-```
-docker compose cp ac-worldserver:/azerothcore/env/dist/etc/authserver.conf conf
-docker compose cp ac-worldserver:/azerothcore/env/dist/etc/worldserver.conf conf
-docker compose cp ac-worldserver:/azerothcore/env/dist/etc/dbimport.conf conf
-```
-
-then create a `docker-compose.override.yml` file in the same folder of the `docker-compose.yml` file 
-and add this configurations:
-
-```
-version: '3.9'
-
-services:
-  ac-worldserver:
-    volumes:
-      - ./conf/worldserver.conf:/azerothcore/env/dist/etc/worldserver.conf
-      - ./conf/authserver.conf:/azerothcore/env/dist/etc/authserver.conf
-      - ./conf/dbimport.conf:/azerothcore/env/dist/etc/dbimport.conf
+```bash
+docker compose up -d                     # 启动所有服务
+docker compose down                      # 停止所有服务
+docker compose down -v                   # 停止并清除数据库（完全重置）
+docker compose restart ac-worldserver    # 重启世界服务器
+docker compose logs -f ac-worldserver    # 查看世界服务器日志
+docker compose logs -f ac-authserver     # 查看认证服务器日志
+docker compose --profile management up -d phpmyadmin  # 启动 phpMyAdmin
 ```
 
-In this way you can inject the 3 extracted files from your host into the container
+### 创建 GM 账号（控制台）
 
-Now you can change the configurations as you wish and restart the server.
+```bash
+docker attach acore-worldserver
+# 输入命令后回车：
+account create <用户名> <密码>
+account set gmlevel <用户名> 3 -1
+# 按 Ctrl+P Ctrl+Q 退出控制台
+```
 
-You can find the list of all the configurations available in these files:
+### 查看在线玩家
 
-1. [worldserver.conf](https://github.com/azerothcore/azerothcore-wotlk/blob/master/src/server/apps/worldserver/worldserver.conf.dist)
-2. [authserver.conf](https://github.com/azerothcore/azerothcore-wotlk/blob/master/src/server/apps/authserver/authserver.conf.dist)
+```bash
+docker attach acore-worldserver
+# 输入：
+account onlinelist
+# Ctrl+P Ctrl+Q 退出
+```
 
-### Customize your server with the database
+## GM 命令参考
 
-The database service available within the docker compose expose a mysql port that can be accessed by any mysql client
-However, our docker compose also provides a pre-configured phpmyadmin container that can be used to access the database.
+### GM 权限等级
 
-What you need to do is the following:
+| 等级 | 权限 |
+|------|------|
+| 0 | 普通玩家 |
+| 1 | 初级 GM |
+| 2 | 中级 GM |
+| 3 | 管理员（全部权限） |
 
-1. **docker compose up phpmyadmin** to startup the phpmyadmin container
-2. connect to **http://127.0.0.1:8080** (unless you changed the port)
-3. insert the db credentials. By default:  ac-database (host), root (user), password (password)
+### 控制台命令
 
-You are ready to go! 
+| 命令 | 说明 |
+|------|------|
+| `account create <用户> <密码>` | 创建账号 |
+| `account delete <用户>` | 删除账号 |
+| `account set gmlevel <用户> <0-3> <领域ID>` | 设置 GM 等级 |
+| `account set addon <用户> <0-2>` | 设置资料片 |
+| `account set password <用户> <新密码> <新密码>` | 修改密码 |
+| `account onlinelist` | 在线玩家列表 |
+| `ban account <用户> <时间> <原因>` | 封禁账号 |
+| `unban account <用户>` | 解封账号 |
 
-Check the [AzerothCore wiki](https://www.azerothcore.org/wiki/documentation_index) to learn how to work with the AC database
-### Customize your server with Lua scripts
+### 游戏中命令（聊天框输入）
 
-The worldserver container included in our docker compose integrates the Eluna module
+| 命令 | 说明 |
+|------|------|
+| `.gm on` / `.gm off` | 开关 GM 模式 |
+| `.additem <物品ID> [数量]` | 添加物品 |
+| `.addmoney <数量>` | 添加金币（铜币单位） |
+| `.levelup [等级]` | 提升等级 |
+| `.learn <技能ID>` | 学习技能 |
+| `.learn all myclass` | 学习本职业所有技能 |
+| `.learn all crafts` | 学习所有商业技能 |
+| `.tele <地图名>` | 传送到地图 |
+| `.go <x> <y> <z> <map>` | 传送到坐标 |
+| `.goname <玩家名>` | 传送到玩家身边 |
+| `.revive` | 复活 |
+| `.npc add <NPC_ID>` | 创建 NPC |
+| `.npc delete` | 删除选中的 NPC |
+| `.modify speed <倍率>` | 修改移动速度 |
+| `.modify money <数量>` | 修改金币 |
+| `.kick <玩家名>` | 踢出玩家 |
+| `.saveall` | 保存所有在线玩家 |
+| `.server shutdown <秒>` | 关闭服务器 |
 
-You just need to install your lua scripts inside the /scripts/lua folder and you are ready to go!
+### 常用传送点
 
-Check the [Eluna documentation](https://github.com/ElunaLuaEngine/Eluna/blob/master/README.md) to learn how to work with this system
+| 命令 | 目的地 |
+|------|--------|
+| `.go -8833 627 94 0` | 暴风城 |
+| `.go 1569 -4397 7 1` | 奥格瑞玛 |
+| `.go -4928 -943 501 0` | 铁炉堡 |
+| `.go 1642 239 -43 0` | 幽暗城 |
+| `.go 5804 624 647 571` | 达拉然 |
+| `.go -1850 5431 -10 530` | 沙塔斯 |
 
-### Customize your server with TypeScript
+### 常用物品 ID
 
-This project also integrates the [Eluna-TS](https://github.com/azerothcore/eluna-ts) system which allows you to create your custom scripts in Typescript! 
+| 物品 ID | 名称 |
+|---------|------|
+| 6948 | 炉石 |
+| 32837 | 埃辛诺斯战刃 (主手) |
+| 32838 | 埃辛诺斯战刃 (副手) |
+| 36942 | 霜之哀伤 |
+| 49623 | 影之哀伤 |
+| 34334 | 索利达尔，群星之怒 |
+| 19019 | 雷霆之怒，逐风者的祝福之剑 |
+| 17182 | 萨弗拉斯，炎魔拉格纳罗斯之手 |
 
-What you need is just create an "index.ts" within the **/scripts/typescript** folder and you can directly start by writing your scripts there or creating other files to import.
+## 模块与脚本
 
-Inside our **docker compose.yml** there's the **ac-eluna-ts-dev** service which check changes on **/scripts/typescript** folder to automatically recompile your TS files into Lua.
+### 模块（`conf/modules/`）
 
-**Disclaimer:** Eluna-TS is based on [TypeScriptToLua](https://typescripttolua.github.io/) which is a Typescript limited environment. You cannot use all the Typescript features, check their page for more info.
+| 模块 | 说明 |
+|------|------|
+| 1v1arena | 1v1 竞技场 |
+| Anticheat | 反作弊 |
+| mod_ahbot | 拍卖行机器人 |
+| mod_eluna | Lua 脚本引擎 |
+| playerbots | 玩家机器人 |
+| PvPScript | PvP 脚本 |
+| transmog | 幻化 |
 
-### Extract client data by your self with the ac-dev-tools container
+### Lua 脚本（`scripts/lua/`）
 
-Within your **.env** file set this variable: **DOCKER_CLIENT_DATA_FOLDER=** with the **absolute path** of the "Data" folder of your game client.
+- `super_hearthstone.lua` — 超级炉石（传送/银行/修理）
+- `portable_vendor.lua` — 随身商人
 
-Now run this command: **docker compose run --rm --no-deps ac-dev-tools bash** to access the shell of the **ac-dev-tools** container. Once inside you can run the following commands:
+Lua 脚本通过 Eluna 引擎热加载，修改后无需重启容器，worldserver 会检测文件变更自动重载。
 
-* **./map_extractor** -> to extract dbc, Cameras and maps
-* **./vmap4_extractor && ./vmap4_assembler** -> to extract and assemble the vertical maps
-* **./mmaps_generator** -> to extract and generate the movement maps
+## Web 注册邮箱配置（可选）
 
-After the extraction (it can take hours) the file will be available inside the `ac-client-data-*` volumes.
+注册页面支持 SMTP 发信，用于密码找回和双因素认证 (2FA)。
+配置文件：`WoWRegistration/application/config/config.php`
 
-## Contributing
-[See the relevant section of the main project](https://github.com/azerothcore/azerothcore-wotlk#contributing)
+| 配置项 | 说明 |
+|--------|------|
+| `smtp_host` | SMTP 服务器地址 |
+| `smtp_port` | SMTP 端口 (587 TLS / 465 SSL) |
+| `smtp_auth` | 启用 SMTP 认证 (true/false) |
+| `smtp_user` | SMTP 邮箱账号 |
+| `smtp_pass` | SMTP 邮箱密码或授权码 |
+| `smtp_secure` | 加密方式 (tls / ssl) |
+| `smtp_mail` | 发件人邮箱地址 |
+
+### 示例
+
+**QQ 邮箱：**
+```php
+$config['smtp_host'] = 'smtp.qq.com';
+$config['smtp_port'] = 465;
+$config['smtp_secure'] = 'ssl';
+$config['smtp_user'] = 'your-qq@qq.com';
+$config['smtp_pass'] = 'QQ邮箱授权码';
+$config['smtp_mail'] = 'your-qq@qq.com';
+```
+
+**163 邮箱：**
+```php
+$config['smtp_host'] = 'smtp.163.com';
+$config['smtp_port'] = 465;
+$config['smtp_secure'] = 'ssl';
+$config['smtp_user'] = 'your-account@163.com';
+$config['smtp_pass'] = '邮箱授权码';
+$config['smtp_mail'] = 'your-account@163.com';
+```
+
+**Gmail：**
+```php
+$config['smtp_host'] = 'smtp.gmail.com';
+$config['smtp_port'] = 587;
+$config['smtp_secure'] = 'tls';
+$config['smtp_user'] = 'your-account@gmail.com';
+$config['smtp_pass'] = '应用专用密码';
+$config['smtp_mail'] = 'your-account@gmail.com';
+```
+
+> 注意：如需启用 2FA，还需将 `$config['2fa_support']` 设为 `true`。
+
+## 客户端连接
+
+1. 将魔兽世界 3.3.5a (12340) 客户端目录下的 `Data/zhCN/realmlist.wtf` 改为：
+   ```
+   set realmlist 你的服务器IP
+   ```
+2. 运行 `Wow.exe` 启动游戏
+3. 使用 Web 注册页面或 GM 命令创建的账号登录
+
+## 数据持久化
+
+| 数据 | 存储位置 |
+|------|----------|
+| 游戏数据库（账号/角色/世界） | Docker volume `ac-database-data` |
+| 服务端日志 | Docker volume `acore-logs` |
+| Lua 脚本 | `./scripts/lua/` (bind mount) |
+| 模块配置 | `./conf/modules/` (bind mount) |
+| 客户端地图数据 | `DOCKER_CLIENT_DATA_PATH` (bind mount) |
+
+## 注意事项
+
+- **Apple Silicon (M1/M2/M3)**：SPK 二进制为 x86_64，需 `export DOCKER_DEFAULT_PLATFORM=linux/amd64`，运行有性能损耗。
+- **非源码编译**：`bin/` 和 `lib/` 是预编译的 SPK 二进制，修改服务端行为需改配置或 Lua 脚本。
+- **首次启动**：worldserver 需要执行数据库迁移，请耐心等待 1-2 分钟。
+- **`.env` 已 gitignore**：发布时随附 `.env` 模板，用户需自行配置。
+
+## 依赖
+
+- Docker >= 20.10
+- Docker Compose >= 2.0
+- 魔兽世界 3.3.5a (12340) 客户端

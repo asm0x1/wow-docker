@@ -1,0 +1,37 @@
+# ============================================
+# AzerothCore Authserver Dockerfile
+# 基于群晖 SPK WoWServer v1.0.52 二进制构建
+# Author: asm0x1
+# ============================================
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmysqlclient21 \
+    mariadb-client \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash wow && \
+    mkdir -p /opt/wow/bin /opt/wow/lib /opt/wow/etc /opt/wow/logs /opt/wow/temp && \
+    mkdir -p /var/packages/WoWServer/target
+
+COPY bin/authserver /opt/wow/bin/authserver
+COPY lib/ /opt/wow/lib/
+COPY authserver.conf /opt/wow/etc/authserver.conf.template
+
+# 创建 Synology 路径符号链接 (二进制硬编码了这些路径)
+RUN ln -sf /opt/wow/etc /var/packages/WoWServer/target/etc && \
+    ln -sf /opt/wow/database /var/packages/WoWServer/target/database && \
+    chown -Rh wow:wow /opt/wow /var/packages/WoWServer
+
+COPY entrypoint-authserver.sh /opt/wow/entrypoint.sh
+RUN chmod +x /opt/wow/entrypoint.sh
+
+ENV LD_LIBRARY_PATH=/opt/wow/lib
+
+WORKDIR /opt/wow
+USER wow
+
+ENTRYPOINT ["/opt/wow/entrypoint.sh"]

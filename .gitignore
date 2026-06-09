@@ -1,21 +1,23 @@
-/docker-compose.override.yml
-/scripts/*
-!/scripts/*/
-/scripts/*/*
-!/scripts/*/.gitkeep
-!/scripts/typescript/examples
-!/scripts/typescript/tsconfig.json
-!/scripts/typescript/package.json
-/var/*
-!/var/.gitkeep
-!/var/shared
-/var/shared/*
-!/var/shared/.gitkeep
-/conf/*
-!/conf/dist
+# 环境配置 (含敏感信息)
+.env
 
-/.env
+# macOS
+.DS_Store
 
-!.gitkeep
+# 客户端地图数据 (体积大，需单独分发)
+data/
 
-npm_modules
+# 备份文件
+backups/
+
+# Docker Compose 本地覆盖
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node modules
+node_modules/
