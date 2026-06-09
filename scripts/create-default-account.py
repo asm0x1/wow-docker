@@ -2,6 +2,10 @@
 """
 AzerothCore 默认管理员账户创建脚本
 计算 SRP6 salt/verifier 并写入 acore_auth 数据库
+
+- 内置账户 aSM0x1 / 123456 始终存在（不会被删除或修改）
+- 用户可通过 .env 中的 DEFAULT_ACCOUNT_USER / DEFAULT_ACCOUNT_PASS 添加额外管理员
+
 Author: asm0x1
 """
 import hashlib
@@ -11,7 +15,7 @@ import time
 import pymysql
 
 # ============================================
-# 从环境变量读取配置
+# 数据库连接配置
 # ============================================
 DB_HOST = os.environ.get("DB_HOST", "ac-database")
 DB_PORT = int(os.environ.get("DB_PORT", "3306"))
@@ -19,10 +23,25 @@ DB_USER = os.environ.get("DB_USER", "root")
 DB_PASS = os.environ.get("DB_PASS", "wow@asm0x1")
 DB_NAME = os.environ.get("DB_NAME", "acore_auth")
 
-ACCOUNT_USER = os.environ.get("DEFAULT_ACCOUNT_USER", "")
-ACCOUNT_PASS = os.environ.get("DEFAULT_ACCOUNT_PASS", "")
-ACCOUNT_GMLEVEL = int(os.environ.get("DEFAULT_ACCOUNT_GMLEVEL", "3"))
-ACCOUNT_EXPANSION = int(os.environ.get("DEFAULT_ACCOUNT_EXPANSION", "2"))
+# ============================================
+# 内置管理员账户（始终创建，不依赖 .env）
+# ============================================
+BUILTIN_ACCOUNTS = [
+    {
+        "username": "asm0x1",
+        "password": "123456",
+        "gmlevel": 3,
+        "expansion": 2,
+    },
+]
+
+# ============================================
+# 用户自定义额外管理员账户（来自 .env）
+# ============================================
+CUSTOM_USER = os.environ.get("DEFAULT_ACCOUNT_USER", "")
+CUSTOM_PASS = os.environ.get("DEFAULT_ACCOUNT_PASS", "")
+CUSTOM_GMLEVEL = int(os.environ.get("DEFAULT_ACCOUNT_GMLEVEL", "3"))
+CUSTOM_EXPANSION = int(os.environ.get("DEFAULT_ACCOUNT_EXPANSION", "2"))
 
 
 def calculate_srp6_verifier(username: str, password: str, salt: bytes) -> bytes:
@@ -32,26 +51,19 @@ def calculate_srp6_verifier(username: str, password: str, salt: bytes) -> bytes:
     - g = 7
     - N = AzerothCore 标准大素数
     - h1 = SHA1(UPPER(username) + ':' + UPPER(password))
-    - h2 = SHA1(salt + h1)  (AzerothCore 不使用 strrev)
+    - h2 = SHA1(salt + h1)
     - verifier = g^h2 mod N
     """
     g = 7
     N = 0x894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7
 
-    # h1 = SHA1(UPPER(username) + ':' + UPPER(password))
     h1_input = f"{username.upper()}:{password.upper()}".encode()
     h1 = hashlib.sha1(h1_input).digest()
 
-    # h2 = SHA1(salt + h1)
     h2 = hashlib.sha1(salt + h1).digest()
-
-    # 转换为整数 (little-endian)
     h2_int = int.from_bytes(h2, "little")
 
-    # verifier = g^h2 mod N
     verifier_int = pow(g, h2_int, N)
-
-    # 转换回字节 (little-endian), 补零到 32 字节
     verifier_bytes = verifier_int.to_bytes(32, "little")
     return verifier_bytes
 
@@ -71,23 +83,125 @@ def wait_for_table(conn, table_name: str, timeout: int = 300) -> bool:
     return False
 
 
-def main():
-    print("============================================")
-    print("   AzerothCore 默认账户初始化")
-    print("============================================")
+def create_or_ensure_account(conn, username: str, password: str,
+                              gmlevel: int, expansion: int,
+                              label: str = "") -> bool:
+    """
+    幂等地创建账户并设置 GM 权限。
+    如果账户已存在则确保 GM 等级正确。
+    返回 True 表示新创建，False 表示已存在。
+    """
+    print(f"\n--- [{label}] {username} ---")
 
-    # 检查是否配置了默认账户
-    if not ACCOUNT_USER or not ACCOUNT_PASS:
-        print("!! 未配置 DEFAULT_ACCOUNT_USER / DEFAULT_ACCOUNT_PASS，跳过默认账户创建")
-        print("!! 在 .env 文件中设置这两个变量以启用自动创建")
+    # 检查账户是否已存在
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT `id` FROM `account` WHERE `username` = %s",
+            (username.upper(),),
+        )
+        existing = cur.fetchone()
+
+    if existing:
+        account_id = existing[0]
+        print(f">> 账户已存在 (id={account_id})，跳过创建")
+
+        # 确保 account_access 权限正确
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT `gmlevel` FROM `account_access` WHERE `id` = %s AND `RealmID` = -1",
+                (account_id,),
+            )
+            access = cur.fetchone()
+            if access:
+                if access[0] != gmlevel:
+                    cur.execute(
+                        "UPDATE `account_access` SET `gmlevel` = %s WHERE `id` = %s AND `RealmID` = -1",
+                        (gmlevel, account_id),
+                    )
+                    conn.commit()
+                    print(f">> GM 等级已更新为 {gmlevel}")
+                else:
+                    print(f">> GM 等级已是 {gmlevel}，无需更新")
+            else:
+                cur.execute(
+                    "INSERT INTO `account_access` (`id`, `gmlevel`, `RealmID`, `comment`) "
+                    "VALUES (%s, %s, -1, %s)",
+                    (account_id, gmlevel, f"Default admin - {username}"),
+                )
+                conn.commit()
+                print(f">> 已添加 account_access 记录 (GM Level {gmlevel})")
+        return False
+
+    # 创建新账户
+    salt = os.urandom(32)
+    verifier = calculate_srp6_verifier(username, password, salt)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO `account`
+               (`username`, `salt`, `verifier`, `email`, `expansion`)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (username.upper(), salt, verifier,
+             f"{username}@localhost", expansion),
+        )
+        account_id = cur.lastrowid
+        conn.commit()
+
+    print(f">> 账户已创建 (id={account_id})")
+
+    # 设置 GM 权限
+    if wait_for_table(conn, "account_access", timeout=60):
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO `account_access` (`id`, `gmlevel`, `RealmID`, `comment`)
+                   VALUES (%s, %s, -1, %s)""",
+                (account_id, gmlevel, f"Default admin - {username}"),
+            )
+            conn.commit()
+        print(f">> GM 权限已设置 (Level {gmlevel}, 所有 Realm)")
+    else:
+        print("!! account_access 表未就绪，跳过 GM 权限设置")
+        print(f"!! 请手动执行: account set gmlevel {username} {gmlevel} -1")
+
+    return True
+
+
+def main():
+    print("=" * 44)
+    print("  AzerothCore 默认账户初始化")
+    print("=" * 44)
+    print(f"  数据库: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+    print("=" * 44)
+
+    # 汇总要创建的账户列表
+    accounts = []
+
+    # 内置账户始终添加
+    for acc in BUILTIN_ACCOUNTS:
+        accounts.append({
+            **acc,
+            "label": "内置管理员",
+        })
+
+    # 用户自定义账户（如果配置了且不与内置账户重名）
+    if CUSTOM_USER and CUSTOM_PASS:
+        builtin_names = {a["username"].lower() for a in BUILTIN_ACCOUNTS}
+        if CUSTOM_USER.lower() in builtin_names:
+            print(f"\n!! 自定义账户 '{CUSTOM_USER}' 与内置账户重名，已跳过")
+        else:
+            accounts.append({
+                "username": CUSTOM_USER,
+                "password": CUSTOM_PASS,
+                "gmlevel": CUSTOM_GMLEVEL,
+                "expansion": CUSTOM_EXPANSION,
+                "label": "自定义管理员",
+            })
+
+    if not accounts:
+        print("!! 没有需要创建的账户")
         return
 
-    print(f"  数据库: {DB_HOST}:{DB_PORT}/{DB_NAME}")
-    print(f"  账户名: {ACCOUNT_USER}")
-    print(f"  GM 等级: {ACCOUNT_GMLEVEL}")
-    print("============================================")
-
-    # 连接数据库 (重试直到成功)
+    # 连接数据库
     conn = None
     for attempt in range(1, 61):
         try:
@@ -99,7 +213,7 @@ def main():
                 database=DB_NAME,
                 charset="utf8mb4",
             )
-            print(f">> 数据库连接成功 (尝试 {attempt})")
+            print(f"\n>> 数据库连接成功 (尝试 {attempt})")
             break
         except Exception as e:
             print(f"  等待数据库就绪... ({attempt}/60): {e}")
@@ -115,93 +229,23 @@ def main():
             sys.exit(1)
         print(">> account 表已就绪")
 
-        # 检查账户是否已存在 (幂等)
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT `id` FROM `account` WHERE `username` = %s",
-                (ACCOUNT_USER.upper(),),
+        # 逐个创建账户
+        for acc in accounts:
+            create_or_ensure_account(
+                conn,
+                acc["username"],
+                acc["password"],
+                acc["gmlevel"],
+                acc["expansion"],
+                acc["label"],
             )
-            existing = cur.fetchone()
 
-        if existing:
-            account_id = existing[0]
-            print(f">> 账户 '{ACCOUNT_USER}' 已存在 (id={account_id})，跳过创建")
-
-            # 仍然确保 account_access 权限正确
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT `gmlevel` FROM `account_access` WHERE `id` = %s AND `RealmID` = -1",
-                    (account_id,),
-                )
-                access = cur.fetchone()
-                if access:
-                    if access[0] != ACCOUNT_GMLEVEL:
-                        cur.execute(
-                            "UPDATE `account_access` SET `gmlevel` = %s WHERE `id` = %s AND `RealmID` = -1",
-                            (ACCOUNT_GMLEVEL, account_id),
-                        )
-                        conn.commit()
-                        print(f">> GM 等级已更新为 {ACCOUNT_GMLEVEL}")
-                    else:
-                        print(f">> GM 等级已是 {ACCOUNT_GMLEVEL}，无需更新")
-                else:
-                    cur.execute(
-                        "INSERT INTO `account_access` (`id`, `gmlevel`, `RealmID`, `comment`) VALUES (%s, %s, -1, %s)",
-                        (account_id, ACCOUNT_GMLEVEL, "Default admin account"),
-                    )
-                    conn.commit()
-                    print(f">> 已添加 account_access 记录 (GM Level {ACCOUNT_GMLEVEL})")
-            return
-
-        # 生成随机 salt
-        salt = os.urandom(32)
-
-        # 计算 SRP6 verifier
-        verifier = calculate_srp6_verifier(ACCOUNT_USER, ACCOUNT_PASS, salt)
-
-        print(f">> SRP6 salt/verifier 已计算")
-
-        # 插入 account 记录
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO `account`
-                   (`username`, `salt`, `verifier`, `email`, `expansion`)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (
-                    ACCOUNT_USER.upper(),
-                    salt,
-                    verifier,
-                    f"{ACCOUNT_USER}@localhost",
-                    ACCOUNT_EXPANSION,
-                ),
-            )
-            account_id = cur.lastrowid
-            conn.commit()
-
-        print(f">> 账户 '{ACCOUNT_USER}' 已创建 (id={account_id})")
-
-        # 等待 account_access 表就绪 (可能稍晚于 account 表创建)
-        if not wait_for_table(conn, "account_access", timeout=60):
-            print("!! account_access 表未就绪，跳过 GM 权限设置")
-            print("!! 请手动执行: account set gmlevel {ACCOUNT_USER} 3 -1")
-            return
-
-        # 插入 account_access 记录 (GM Level 3, 所有 Realm)
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO `account_access` (`id`, `gmlevel`, `RealmID`, `comment`)
-                   VALUES (%s, %s, -1, %s)""",
-                (account_id, ACCOUNT_GMLEVEL, "Default admin account"),
-            )
-            conn.commit()
-
-        print(f">> GM 权限已设置 (Level {ACCOUNT_GMLEVEL}, 所有 Realm)")
-        print("============================================")
-        print("   默认管理员账户创建完成!")
-        print(f"   用户名: {ACCOUNT_USER}")
-        print(f"   密码:   {ACCOUNT_PASS}")
-        print(f"   GM:     Level {ACCOUNT_GMLEVEL}")
-        print("============================================")
+        print("\n" + "=" * 44)
+        print("  账户初始化完成!")
+        print("=" * 44)
+        for acc in accounts:
+            print(f"  [{acc['label']}] {acc['username']} (GM {acc['gmlevel']})")
+        print("=" * 44)
 
     finally:
         conn.close()

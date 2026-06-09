@@ -33,7 +33,8 @@ docker compose up -d
 | 63306 | MariaDB (外部连接) |
 | 8081 | phpMyAdmin (`--profile management`) |
 
-默认管理员账号：`asm0x1` / `123456`（GM Level 3，由 `.env` 中的 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 配置）
+内置管理员账户 `asm0x1` / `123456`（GM Level 3）始终存在，不可删除。
+可在 `.env` 中配置 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 添加额外的自定义管理员。
 
 ## 服务架构
 
@@ -52,16 +53,21 @@ ac-database (MariaDB 10.11)
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | **REALM_IP** | 127.0.0.1 | **本机 IP（必改）** |
-| **DEFAULT_ACCOUNT_USER** | - | 默认管理员用户名 |
-| **DEFAULT_ACCOUNT_PASS** | - | 默认管理员密码 |
+| DEFAULT_ACCOUNT_USER | (空) | 额外自定义管理员用户名（可选） |
+| DEFAULT_ACCOUNT_PASS | (空) | 额外自定义管理员密码（可选） |
 | DEFAULT_ACCOUNT_GMLEVEL | 3 | 默认管理员 GM 等级 |
 | DEFAULT_ACCOUNT_EXPANSION | 2 | 默认账号资料片 (0=经典/1=TBC/2=WotLK) |
-| DOCKER_CLIENT_DATA_PATH | ./data | 客户端地图数据路径 |
 | DOCKER_WORLD_EXTERNAL_PORT | 8085 | 世界服务器端口 |
 | DOCKER_AUTH_EXTERNAL_PORT | 3724 | 认证服务器端口 |
 | DOCKER_REGISTRATION_EXTERNAL_PORT | 8765 | Web 注册页面端口 |
 | DOCKER_DB_EXTERNAL_PORT | 63306 | MariaDB 外部端口 |
 | DOCKER_DB_ROOT_PASSWORD | wow@asm0x1 | MariaDB root 密码 |
+| BOT_MIN_COUNT | 15 | 最少在线假人数量 |
+| BOT_MAX_COUNT | 20 | 最多在线假人数量 |
+| BOT_MIN_LEVEL | 1 | 假人最低等级 |
+| BOT_MAX_LEVEL | 80 | 假人最高等级 |
+| BOT_ALLIANCE_RATIO | 50 | 联盟阵营比例 (%) |
+| BOT_HORDE_RATIO | 50 | 部落阵营比例 (%) |
 
 ## 实用命令
 
@@ -188,6 +194,35 @@ account onlinelist
 
 Lua 脚本通过 Eluna 引擎热加载，修改后无需重启容器，worldserver 会检测文件变更自动重载。
 
+### Playerbots 假人系统（`conf/modules/playerbots.conf.dist`）
+
+服务端内置玩家机器人，模拟真实玩家行为。首次启动自动导入基础数据，启动后假人自动登录。
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `AiPlayerbot.Enabled` | 1 | 启用假人系统 |
+| `AiPlayerbot.RandomBotAutologin` | 1 | 启动时自动登录随机假人 |
+| `AiPlayerbot.MinRandomBots` | 15 | 最少在线假人数 |
+| `AiPlayerbot.MaxRandomBots` | 20 | 最多在线假人数 |
+| `AiPlayerbot.RandomBotMinLevel` | 1 | 假人最低等级 |
+| `AiPlayerbot.RandomBotMaxLevel` | 80 | 假人最高等级 |
+| `AiPlayerbot.SyncLevelWithPlayers` | 1 | 与在线玩家等级同步 |
+| `AiPlayerbot.RandomBotAllianceRatio` | 50 | 联盟比例 (%) |
+| `AiPlayerbot.RandomBotHordeRatio` | 50 | 部落比例 (%) |
+| `AiPlayerbot.RandomBotJoinBG` | 1 | 假人参与战场 |
+| `AiPlayerbot.RandomBotJoinLfg` | 1 | 假人参与随机副本 |
+| `AiPlayerbot.RandomBotGuildCount` | 20 | 假人公会数量 |
+
+**游戏中交互**：
+- 聊天框输入私语指令控制队伍中的假人（跟随、攻击、治疗等）
+- 假人会自行组队、刷怪、做任务、排战场和副本
+- 假人会在世界频道聊天互动
+
+修改配置后重启 worldserver 生效：
+```bash
+docker compose restart ac-worldserver
+```
+
 ## Web 注册邮箱配置（可选）
 
 注册页面支持 SMTP 发信，用于密码找回和双因素认证 (2FA)。
@@ -254,7 +289,7 @@ $config['smtp_mail'] = 'your-account@gmail.com';
 | 服务端日志 | Docker volume `acore-logs` |
 | Lua 脚本 | `./scripts/lua/` (bind mount) |
 | 模块配置 | `./conf/modules/` (bind mount) |
-| 客户端地图数据 | `DOCKER_CLIENT_DATA_PATH` (bind mount) |
+| 客户端地图数据 | `./data/` (bind mount) |
 
 ## 注意事项
 

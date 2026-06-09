@@ -82,8 +82,8 @@ AiPlayerbot.Enabled = 1
 AiPlayerbot.RandomBotAutologin = 1
 
 # 随机机器人数量
-AiPlayerbot.MinRandomBots = 15
-AiPlayerbot.MaxRandomBots = 20
+AiPlayerbot.MinRandomBots = __BOT_MIN_COUNT__
+AiPlayerbot.MaxRandomBots = __BOT_MAX_COUNT__
 
 # 随机机器人账号
 # 如果未使用任何资料片，可能需要手动设置此值
@@ -504,8 +504,8 @@ AiPlayerbot.RandomBotRandomPassword = 0
 # 随机机器人账号前缀
 AiPlayerbot.RandomBotAccountPrefix = "rndbot"
 
-AiPlayerbot.RandomBotMinLevel = 1
-AiPlayerbot.RandomBotMaxLevel = 80
+AiPlayerbot.RandomBotMinLevel = __BOT_MIN_LEVEL__
+AiPlayerbot.RandomBotMaxLevel = __BOT_MAX_LEVEL__
 
 # 同步随机机器人等级与在线玩家最高等级
 # 默认: 0（禁用）
@@ -528,8 +528,8 @@ AiPlayerbot.EnablePeriodicOnlineOffline = 0
 AiPlayerbot.PeriodicOnlineOfflineRatio = 2.0
 
 # 阵营比例（联盟50%，部落50%）
-AiPlayerbot.RandomBotAllianceRatio = 50
-AiPlayerbot.RandomBotHordeRatio = 50
+AiPlayerbot.RandomBotAllianceRatio = __BOT_ALLIANCE_RATIO__
+AiPlayerbot.RandomBotHordeRatio = __BOT_HORDE_RATIO__
 
 # 禁用死亡骑士登录
 AiPlayerbot.DisableDeathKnightLogin = 0

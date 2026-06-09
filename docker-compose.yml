@@ -48,12 +48,18 @@ services:
       - ${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
     environment:
       DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      BOT_MIN_COUNT: ${BOT_MIN_COUNT:-15}
+      BOT_MAX_COUNT: ${BOT_MAX_COUNT:-20}
+      BOT_MIN_LEVEL: ${BOT_MIN_LEVEL:-1}
+      BOT_MAX_LEVEL: ${BOT_MAX_LEVEL:-80}
+      BOT_ALLIANCE_RATIO: ${BOT_ALLIANCE_RATIO:-50}
+      BOT_HORDE_RATIO: ${BOT_HORDE_RATIO:-50}
     volumes:
       - acore-logs:/opt/wow/logs
       - ./scripts/lua:/opt/wow/lua_scripts:ro
       - ./database:/opt/wow/database:ro
-      - ./conf/modules:/opt/wow/etc/modules:ro
-      - ${DOCKER_CLIENT_DATA_PATH:-./data}:/opt/wow/data:ro
+      - ./conf/modules:/opt/wow/etc/modules
+      - ./data:/opt/wow/data:ro
     depends_on:
       ac-database:
         condition: service_healthy

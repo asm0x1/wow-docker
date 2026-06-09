@@ -19,5 +19,8 @@ docker-compose.override.yml
 *.swp
 *.swo
 
+# 生成的模块配置 (由 entrypoint 从 .conf.dist 生成)
+conf/modules/*.conf
+
 # Node modules
 node_modules/

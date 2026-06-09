@@ -16,6 +16,27 @@ sed "s/__DB_PASSWORD__/${DB_PASSWORD}/g" \
     /opt/wow/etc/worldserver.conf.template \
     > /opt/wow/etc/worldserver.conf
 
+# 生成模块配置（从 .conf.dist 模板替换占位符）
+BOT_MIN_COUNT="${BOT_MIN_COUNT:-15}"
+BOT_MAX_COUNT="${BOT_MAX_COUNT:-20}"
+BOT_MIN_LEVEL="${BOT_MIN_LEVEL:-1}"
+BOT_MAX_LEVEL="${BOT_MAX_LEVEL:-80}"
+BOT_ALLIANCE_RATIO="${BOT_ALLIANCE_RATIO:-50}"
+BOT_HORDE_RATIO="${BOT_HORDE_RATIO:-50}"
+
+for template in /opt/wow/etc/modules/*.conf.dist; do
+    [ -f "$template" ] || continue
+    target="${template%.dist}"
+    echo ">> [entrypoint] 生成模块配置: $(basename "$target")"
+    sed -e "s/__BOT_MIN_COUNT__/${BOT_MIN_COUNT}/g" \
+        -e "s/__BOT_MAX_COUNT__/${BOT_MAX_COUNT}/g" \
+        -e "s/__BOT_MIN_LEVEL__/${BOT_MIN_LEVEL}/g" \
+        -e "s/__BOT_MAX_LEVEL__/${BOT_MAX_LEVEL}/g" \
+        -e "s/__BOT_ALLIANCE_RATIO__/${BOT_ALLIANCE_RATIO}/g" \
+        -e "s/__BOT_HORDE_RATIO__/${BOT_HORDE_RATIO}/g" \
+        "$template" > "$target"
+done
+
 # ============================================
 # 导入 Playerbots 数据库基础表结构
 # 原 SPK 预装了 MariaDB 数据目录，Docker 需要手动处理
