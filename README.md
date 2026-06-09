@@ -5,23 +5,32 @@
 
 > Author: asm0x1
 
-## 快速开始
+## 部署方式
+
+| 方式 | 适用场景 | 说明 |
+|------|----------|------|
+| **本地部署** | Mac/Linux 开发测试 | `docker compose up -d`，本地构建镜像 |
+| **NAS 部署** | 绿联 NAS（无命令行） | 拉取 Docker Hub 镜像，UI 操作 |
+
+> NAS 部署详见 [`nas/部署说明.md`](nas/部署说明.md)，只需改 YAML 顶部 2 个值即可部署。
+
+## 快速开始（本地）
 
 ```bash
-# 1. 复制并编辑 .env 文件
+# 1. 复制 .env 模板并编辑
 cp conf/dist/.env .env
-# 修改 REALM_IP 为你的本机 IP
+# 改 REALM_IP 为你本机 IP
 #   macOS:  ipconfig getifaddr en0
 #   Linux:  hostname -I
 
 # 2. Apple Silicon Mac 必须设置 (Intel Mac 跳过)
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
-# 3. 启动全部服务
+# 3. 启动
 docker compose up -d
 ```
 
-首次启动 worldserver 会自动执行数据库迁移和 playerbots 表初始化，等待约 1-2 分钟。
+首次启动 worldserver 自动执行数据库迁移和 playerbots 初始化，等待 1-2 分钟。
 
 启动后访问：
 | 端口 | 服务 |
@@ -33,8 +42,8 @@ docker compose up -d
 | 63306 | MariaDB (外部连接) |
 | 8081 | phpMyAdmin (`--profile management`) |
 
-内置管理员账户 `asm0x1` / `123456`（GM Level 3）始终存在，不可删除。
-可在 `.env` 中配置 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 添加额外的自定义管理员。
+内置管理员账户 `asm0x1` / `123456`（GM Level 3）始终存在。
+可在 `.env` 中配置 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 添加额外管理员。
 
 ## 服务架构
 
@@ -296,7 +305,16 @@ $config['smtp_mail'] = 'your-account@gmail.com';
 - **Apple Silicon (M1/M2/M3)**：SPK 二进制为 x86_64，需 `export DOCKER_DEFAULT_PLATFORM=linux/amd64`，运行有性能损耗。
 - **非源码编译**：`bin/` 和 `lib/` 是预编译的 SPK 二进制，修改服务端行为需改配置或 Lua 脚本。
 - **首次启动**：worldserver 需要执行数据库迁移，请耐心等待 1-2 分钟。
-- **`.env` 已 gitignore**：发布时随附 `.env` 模板，用户需自行配置。
+- **NAS 部署**：使用 `nas/docker-compose.yml`，镜像从 Docker Hub 拉取（`asm0x1/wow-worldserver` 等），无需本地构建。配置在 YAML 文件顶部用锚点定义，改一处即可。
+- **`.env` 已 gitignore**：本地部署使用 `conf/dist/.env` 模板。
+
+## Docker Hub 镜像
+
+| 镜像 | 大小 |
+|------|------|
+| `asm0x1/wow-worldserver:latest` | ~632MB |
+| `asm0x1/wow-authserver:latest` | ~605MB |
+| `asm0x1/wow-registration:latest` | ~183MB |
 
 ## 依赖
 
