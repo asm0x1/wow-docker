@@ -6,12 +6,35 @@
 #
 # 部署方式 (绿联 Docker 管理界面):
 #   1. 将此文件内容粘贴到 Docker → 项目 → 新建项目 → Compose 编辑器
-#   2. 修改下面的 REALM_IP 为 NAS 的局域网 IP（搜索 "REALM_IP"）
-#   3. 修改数据库密码（可选，搜索 "DB密码"）
-#   4. 点击「部署」
+#   2. 修改下面「部署配置」中的 REALM_IP 和 DB_ROOT_PASS（各一处）
+#   3. 点击「部署」
 #
 #   所有镜像从 Docker Hub 自动拉取，无需构建。
 # ============================================
+
+# ============================================
+# 部署配置 —— 只需改这里！
+# REALM_IP 改 NAS IP，DB_ROOT_PASS 改密码，其余通常不用动
+# ============================================
+x-deploy-config:
+  REALM_IP:      &REALM_IP      192.168.1.100   # ← 必改：NAS 的局域网 IP
+  DB_ROOT_PASS:  &DB_ROOT_PASS  wow@asm0x1       # 数据库 root 密码（按需修改）
+
+# 以下通常无需修改
+x-port-config:
+  REALM_PORT:    &REALM_PORT    8085
+  DB_EXT_PORT:   &DB_EXT_PORT   63306
+  AUTH_PORT:     &AUTH_PORT     3724
+  REG_PORT:      &REG_PORT      8765
+  SOAP_PORT:     &SOAP_PORT     7878
+
+x-bot-config:
+  BOT_MIN_COUNT:     &BOT_MIN_COUNT     15
+  BOT_MAX_COUNT:     &BOT_MAX_COUNT     20
+  BOT_MIN_LEVEL:     &BOT_MIN_LEVEL     1
+  BOT_MAX_LEVEL:     &BOT_MAX_LEVEL     80
+  BOT_ALLIANCE_RATIO: &BOT_ALLIANCE_RATIO 50
+  BOT_HORDE_RATIO:   &BOT_HORDE_RATIO   50
 
 services:
   # ============================================
@@ -24,9 +47,10 @@ services:
     cap_add:
       - SYS_NICE
     ports:
-      - "63306:3306"                    # 外部数据库端口，按需修改
+      - "63306:3306"
     environment:
-      MARIADB_ROOT_PASSWORD: wow@asm0x1 # DB密码，按需修改
+      MARIADB_ROOT_PASSWORD: *DB_ROOT_PASS
+      DB_EXT_PORT: *DB_EXT_PORT
     volumes:
       - ac-database-data:/var/lib/mysql
     healthcheck:
@@ -49,16 +73,18 @@ services:
     cap_add:
       - SYS_NICE
     ports:
-      - "8085:8085"                     # 游戏世界端口
-      - "7878:7878"                     # SOAP 远程管理端口
+      - "8085:8085"
+      - "7878:7878"
     environment:
-      DB_PASSWORD: wow@asm0x1           # DB密码，需与上面 MARIADB_ROOT_PASSWORD 一致
-      BOT_MIN_COUNT: 15                 # 最少在线假人数量
-      BOT_MAX_COUNT: 20                 # 最多在线假人数量
-      BOT_MIN_LEVEL: 1                  # 假人最低等级
-      BOT_MAX_LEVEL: 80                 # 假人最高等级
-      BOT_ALLIANCE_RATIO: 50            # 联盟阵营比例 (%)
-      BOT_HORDE_RATIO: 50               # 部落阵营比例 (%)
+      DB_PASSWORD: *DB_ROOT_PASS
+      REALM_PORT: *REALM_PORT
+      SOAP_PORT: *SOAP_PORT
+      BOT_MIN_COUNT: *BOT_MIN_COUNT
+      BOT_MAX_COUNT: *BOT_MAX_COUNT
+      BOT_MIN_LEVEL: *BOT_MIN_LEVEL
+      BOT_MAX_LEVEL: *BOT_MAX_LEVEL
+      BOT_ALLIANCE_RATIO: *BOT_ALLIANCE_RATIO
+      BOT_HORDE_RATIO: *BOT_HORDE_RATIO
     volumes:
       - acore-logs:/opt/wow/logs
       - ./data:/opt/wow/data:ro
@@ -82,12 +108,12 @@ services:
     environment:
       DB_HOST: ac-database
       DB_USER: root
-      DB_PASS: wow@asm0x1              # DB密码
-      REALM_IP: 192.168.1.100           # ← 必改：替换为 NAS 的局域网 IP
-      REALM_PORT: 8085                  # 游戏世界端口
+      DB_PASS: *DB_ROOT_PASS
+      REALM_IP: *REALM_IP
+      REALM_PORT: *REALM_PORT
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
-      - ./.env:/env:ro                  # 可选：加载 .env 中的 REALM_IP（优先级高于上面）
+      - ./.env:/env:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -95,8 +121,6 @@ services:
 
   # ============================================
   # 默认管理员账户创建 (一次性)
-  # 内置 asm0x1 / 123456 (GM 3) 始终创建
-  # 如需额外管理员，修改下面的用户名和密码
   # ============================================
   ac-account-init:
     image: python:3.11-alpine
@@ -109,10 +133,10 @@ services:
     environment:
       DB_HOST: ac-database
       DB_USER: root
-      DB_PASS: wow@asm0x1              # DB密码
+      DB_PASS: *DB_ROOT_PASS
       DB_NAME: acore_auth
-      DEFAULT_ACCOUNT_USER: ""          # 额外管理员用户名，留空不创建
-      DEFAULT_ACCOUNT_PASS: ""          # 额外管理员密码，留空不创建
+      DEFAULT_ACCOUNT_USER: ""
+      DEFAULT_ACCOUNT_PASS: ""
       DEFAULT_ACCOUNT_GMLEVEL: 3
       DEFAULT_ACCOUNT_EXPANSION: 2
     volumes:
@@ -132,9 +156,10 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - "3724:3724"                     # 游戏登录端口
+      - "3724:3724"
     environment:
-      DB_PASSWORD: wow@asm0x1           # DB密码
+      DB_PASSWORD: *DB_ROOT_PASS
+      AUTH_PORT: *AUTH_PORT
     volumes:
       - acore-logs:/opt/wow/logs
     depends_on:
@@ -153,17 +178,19 @@ services:
     container_name: acore-registration
     restart: unless-stopped
     ports:
-      - "8765:80"                       # Web 注册页面端口
+      - "8765:80"
+    environment:
+      REALM_IP: *REALM_IP
+      REG_PORT: *REG_PORT
     volumes:
-      - ./.env:/env:ro                  # 可选：加载 .env 中的 REALM_IP
+      - ./.env:/env:ro
     depends_on:
       ac-realm-init:
         condition: service_completed_successfully
     command: >
       sh -c "
       [ -f /env ] && . /env;
-      export REALM_IP=\"\${REALM_IP:-192.168.1.100}\";
-      envsubst '\$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
+      envsubst '$$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
       apache2-foreground
       "
     networks:
@@ -181,7 +208,7 @@ services:
   #     - PMA_ARBITRARY=1
   #     - PMA_HOST=ac-database
   #     - PMA_USER=root
-  #     - PMA_PASSWORD=wow@asm0x1
+  #     - PMA_PASSWORD=*DB_ROOT_PASS
   #   depends_on:
   #     ac-database:
   #       condition: service_healthy
