@@ -88,8 +88,6 @@ services:
         condition: service_healthy
       ac-worldserver:
         condition: service_started
-    env_file:
-      - .env
     environment:
       DB_HOST: ac-database
       DB_USER: root
@@ -98,7 +96,6 @@ services:
       REALM_PORT: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
-      - ./.env:/env:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -120,8 +117,8 @@ services:
       DB_USER: root
       DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
       DB_NAME: acore_auth
-      DEFAULT_ACCOUNT_USER: ${DEFAULT_ACCOUNT_USER}
-      DEFAULT_ACCOUNT_PASS: ${DEFAULT_ACCOUNT_PASS}
+      DEFAULT_ACCOUNT_USER: ${DEFAULT_ACCOUNT_USER:-}
+      DEFAULT_ACCOUNT_PASS: ${DEFAULT_ACCOUNT_PASS:-}
       DEFAULT_ACCOUNT_GMLEVEL: ${DEFAULT_ACCOUNT_GMLEVEL:-3}
       DEFAULT_ACCOUNT_EXPANSION: ${DEFAULT_ACCOUNT_EXPANSION:-2}
     volumes:
