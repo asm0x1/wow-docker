@@ -97,6 +97,7 @@ services:
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
       - ./.env:/env:ro
+      - ./realm-ip.conf:/etc/wow/realm-ip.conf:ro
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -163,20 +164,19 @@ services:
       - ${DOCKER_REGISTRATION_EXTERNAL_PORT:-8765}:80
     volumes:
       - ./.env:/env:ro
+      - ./realm-ip.conf:/etc/wow/realm-ip.conf:ro
     depends_on:
       ac-realm-init:
         condition: service_completed_successfully
     command: >
       sh -c "
-      if [ -f /env ]; then
-        echo '>> 从 /env 加载环境变量...';
-        . /env;
-      elif [ -d /env ]; then
-        echo '!! 错误: /env 是目录而非文件，.env 未挂载！';
+      if [ -f /etc/wow/realm-ip.conf ]; then
+        REALM_IP=\$$(head -1 /etc/wow/realm-ip.conf | tr -d ' \n');
+        echo \">> 从配置文件读取 REALM_IP: \$${REALM_IP}\";
       fi;
-      export REALM_IP=\"\${REALM_IP:-127.0.0.1}\";
-      echo \">> 注册页 Realm IP: \${REALM_IP}\";
-      envsubst '\$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
+      [ -f /env ] && . /env;
+      export REALM_IP=\"\$${REALM_IP:-127.0.0.1}\";
+      envsubst '\$$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
       apache2-foreground
       "
     networks:

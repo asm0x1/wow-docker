@@ -12,11 +12,6 @@ if [ -f /env ]; then
     set -a
     . /env
     set +a
-elif [ -d /env ]; then
-    echo "!! 错误: /env 是一个目录而不是文件！"
-    echo "!! 原因: 部署时 .env 文件不存在，Docker 自动创建了同名目录。"
-    echo "!! 修复: 删除 .env 目录，创建 .env 文件后重新部署。"
-    echo "!! 将使用 Compose 传入的默认值继续..."
 fi
 
 DB_HOST="${DB_HOST:-ac-database}"
