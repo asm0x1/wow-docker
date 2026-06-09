@@ -1,13 +1,14 @@
 # ============================================
 # AzerothCore WotLK 3.3.5a - 绿联 NAS Docker Compose
-# 适配: DXP4800 Plus (Intel 8505 x86_64)
+# 适配: DXP4800 Plus (Intel 8505 x86_64) 及其他绿联 x86 NAS
 # Author: asm0x1
 # ============================================
 #
 # 部署方式 (绿联 Docker 管理界面):
-#   项目文件夹: 指向本 nas/ 目录
-#   .env 文件:  复制 .env.dist 为 .env 并修改
-#   数据目录:   将客户端地图放入 nas/data/ 下
+#   1. 将此文件内容粘贴到 Docker → 项目 → 新建项目 → Compose 编辑器
+#   2. 修改下面的 REALM_IP 为 NAS 的局域网 IP（搜索 "REALM_IP"）
+#   3. 修改数据库密码（可选，搜索 "DB密码"）
+#   4. 点击「部署」
 #
 #   所有镜像从 Docker Hub 自动拉取，无需构建。
 # ============================================
@@ -23,9 +24,9 @@ services:
     cap_add:
       - SYS_NICE
     ports:
-      - ${DOCKER_DB_EXTERNAL_PORT:-63306}:3306
+      - "63306:3306"                    # 外部数据库端口，按需修改
     environment:
-      MARIADB_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      MARIADB_ROOT_PASSWORD: wow@asm0x1 # DB密码，按需修改
     volumes:
       - ac-database-data:/var/lib/mysql
     healthcheck:
@@ -35,14 +36,9 @@ services:
       retries: 20
     networks:
       - ac-network
-    # 资源限制 (按需取消注释)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 1G
 
   # ============================================
-  # 世界服务器 (预构建镜像，从 Docker Hub 拉取)
+  # 世界服务器 (从 Docker Hub 拉取预构建镜像)
   # ============================================
   ac-worldserver:
     image: asm0x1/wow-worldserver:latest
@@ -53,16 +49,16 @@ services:
     cap_add:
       - SYS_NICE
     ports:
-      - ${DOCKER_WORLD_EXTERNAL_PORT:-8085}:8085
-      - ${DOCKER_SOAP_EXTERNAL_PORT:-7878}:7878
+      - "8085:8085"                     # 游戏世界端口
+      - "7878:7878"                     # SOAP 远程管理端口
     environment:
-      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
-      BOT_MIN_COUNT: ${BOT_MIN_COUNT:-15}
-      BOT_MAX_COUNT: ${BOT_MAX_COUNT:-20}
-      BOT_MIN_LEVEL: ${BOT_MIN_LEVEL:-1}
-      BOT_MAX_LEVEL: ${BOT_MAX_LEVEL:-80}
-      BOT_ALLIANCE_RATIO: ${BOT_ALLIANCE_RATIO:-50}
-      BOT_HORDE_RATIO: ${BOT_HORDE_RATIO:-50}
+      DB_PASSWORD: wow@asm0x1           # DB密码，需与上面 MARIADB_ROOT_PASSWORD 一致
+      BOT_MIN_COUNT: 15                 # 最少在线假人数量
+      BOT_MAX_COUNT: 20                 # 最多在线假人数量
+      BOT_MIN_LEVEL: 1                  # 假人最低等级
+      BOT_MAX_LEVEL: 80                 # 假人最高等级
+      BOT_ALLIANCE_RATIO: 50            # 联盟阵营比例 (%)
+      BOT_HORDE_RATIO: 50               # 部落阵营比例 (%)
     volumes:
       - acore-logs:/opt/wow/logs
       - ./data:/opt/wow/data:ro
@@ -71,11 +67,6 @@ services:
         condition: service_healthy
     networks:
       - ac-network
-    # 资源限制 (按需取消注释)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 4G
 
   # ============================================
   # Realm 地址初始化 (一次性)
@@ -91,13 +82,12 @@ services:
     environment:
       DB_HOST: ac-database
       DB_USER: root
-      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
-      REALM_IP: ${REALM_IP:-127.0.0.1}
-      REALM_PORT: ${DOCKER_WORLD_EXTERNAL_PORT:-8085}
+      DB_PASS: wow@asm0x1              # DB密码
+      REALM_IP: 192.168.1.100           # ← 必改：替换为 NAS 的局域网 IP
+      REALM_PORT: 8085                  # 游戏世界端口
     volumes:
       - ./scripts/realm-init.sh:/realm-init.sh:ro
-      - ./.env:/env:ro
-      - ./realm-ip.conf:/etc/wow/realm-ip.conf:ro
+      - ./.env:/env:ro                  # 可选：加载 .env 中的 REALM_IP（优先级高于上面）
     entrypoint: ["bash", "/realm-init.sh"]
     networks:
       - ac-network
@@ -105,6 +95,8 @@ services:
 
   # ============================================
   # 默认管理员账户创建 (一次性)
+  # 内置 asm0x1 / 123456 (GM 3) 始终创建
+  # 如需额外管理员，修改下面的用户名和密码
   # ============================================
   ac-account-init:
     image: python:3.11-alpine
@@ -117,12 +109,12 @@ services:
     environment:
       DB_HOST: ac-database
       DB_USER: root
-      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      DB_PASS: wow@asm0x1              # DB密码
       DB_NAME: acore_auth
-      DEFAULT_ACCOUNT_USER: ${DEFAULT_ACCOUNT_USER:-}
-      DEFAULT_ACCOUNT_PASS: ${DEFAULT_ACCOUNT_PASS:-}
-      DEFAULT_ACCOUNT_GMLEVEL: ${DEFAULT_ACCOUNT_GMLEVEL:-3}
-      DEFAULT_ACCOUNT_EXPANSION: ${DEFAULT_ACCOUNT_EXPANSION:-2}
+      DEFAULT_ACCOUNT_USER: ""          # 额外管理员用户名，留空不创建
+      DEFAULT_ACCOUNT_PASS: ""          # 额外管理员密码，留空不创建
+      DEFAULT_ACCOUNT_GMLEVEL: 3
+      DEFAULT_ACCOUNT_EXPANSION: 2
     volumes:
       - ./scripts/create-default-account.py:/create-account.py:ro
     entrypoint: ["sh", "-c", "pip install -q pymysql && python /create-account.py"]
@@ -131,7 +123,7 @@ services:
     restart: "no"
 
   # ============================================
-  # 认证服务器 (预构建镜像，从 Docker Hub 拉取)
+  # 认证服务器 (从 Docker Hub 拉取预构建镜像)
   # ============================================
   ac-authserver:
     image: asm0x1/wow-authserver:latest
@@ -140,9 +132,9 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - ${DOCKER_AUTH_EXTERNAL_PORT:-3724}:3724
+      - "3724:3724"                     # 游戏登录端口
     environment:
-      DB_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+      DB_PASSWORD: wow@asm0x1           # DB密码
     volumes:
       - acore-logs:/opt/wow/logs
     depends_on:
@@ -154,29 +146,24 @@ services:
       - ac-network
 
   # ============================================
-  # Web 注册页面 (预构建镜像，从 Docker Hub 拉取)
+  # Web 注册页面 (从 Docker Hub 拉取预构建镜像)
   # ============================================
   ac-registration:
     image: asm0x1/wow-registration:latest
     container_name: acore-registration
     restart: unless-stopped
     ports:
-      - ${DOCKER_REGISTRATION_EXTERNAL_PORT:-8765}:80
+      - "8765:80"                       # Web 注册页面端口
     volumes:
-      - ./.env:/env:ro
-      - ./realm-ip.conf:/etc/wow/realm-ip.conf:ro
+      - ./.env:/env:ro                  # 可选：加载 .env 中的 REALM_IP
     depends_on:
       ac-realm-init:
         condition: service_completed_successfully
     command: >
       sh -c "
-      if [ -f /etc/wow/realm-ip.conf ]; then
-        REALM_IP=\$$(head -1 /etc/wow/realm-ip.conf | tr -d ' \n');
-        echo \">> 从配置文件读取 REALM_IP: \$${REALM_IP}\";
-      fi;
       [ -f /env ] && . /env;
-      export REALM_IP=\"\$${REALM_IP:-127.0.0.1}\";
-      envsubst '\$$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
+      export REALM_IP=\"\${REALM_IP:-192.168.1.100}\";
+      envsubst '\$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
       apache2-foreground
       "
     networks:
@@ -189,12 +176,12 @@ services:
   # phpmyadmin:
   #   image: phpmyadmin
   #   ports:
-  #     - 8081:80
+  #     - "8081:80"
   #   environment:
   #     - PMA_ARBITRARY=1
   #     - PMA_HOST=ac-database
   #     - PMA_USER=root
-  #     - PMA_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
+  #     - PMA_PASSWORD=wow@asm0x1
   #   depends_on:
   #     ac-database:
   #       condition: service_healthy

@@ -57,7 +57,7 @@ PLAYERBOTS_BASE="/opt/wow/database/modules/mod-playerbots/data/sql/playerbots/ba
 if [ -d "$PLAYERBOTS_BASE" ]; then
     echo ">> [entrypoint] 检查 Playerbots 基础表..."
     if ! mariadb -h ac-database -uroot -p"${DB_PASSWORD}" acore_playerbots \
-        -e "SELECT 1 FROM version_db_playerbots LIMIT 1" 2>/dev/null; then
+        -e "SELECT 1 FROM ai_playerbot_texts LIMIT 1" 2>/dev/null; then
         echo ">> [entrypoint] 导入 Playerbots 基础表..."
         for sql_file in "$PLAYERBOTS_BASE"/*.sql; do
             echo "   - $(basename "$sql_file")"
