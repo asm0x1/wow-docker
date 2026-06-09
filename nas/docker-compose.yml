@@ -10,15 +10,15 @@
 #   3. 点击「部署」
 #
 #   所有镜像从 Docker Hub 自动拉取，无需构建。
+#   Realm 初始化和账户创建已内置在 authserver 中，不再有一次性容器。
 # ============================================
 
 # ============================================
 # 部署配置 —— 只需改这里！
-# REALM_IP 改 NAS IP，DB_ROOT_PASS 改密码，其余通常不用动
 # ============================================
 x-deploy-config:
   REALM_IP:      &REALM_IP      192.168.1.100   # ← 必改：NAS 的局域网 IP
-  DB_ROOT_PASS:  &DB_ROOT_PASS  wow@asm0x1       # 数据库 root 密码（按需修改）
+  DB_ROOT_PASS:  &DB_ROOT_PASS  wow@asm0x1       # 数据库密码（按需修改）
 
 # 以下通常无需修改
 x-port-config:
@@ -62,7 +62,7 @@ services:
       - ac-network
 
   # ============================================
-  # 世界服务器 (从 Docker Hub 拉取预构建镜像)
+  # 世界服务器 (从 Docker Hub 拉取)
   # ============================================
   ac-worldserver:
     image: asm0x1/wow-worldserver:latest
@@ -95,58 +95,8 @@ services:
       - ac-network
 
   # ============================================
-  # Realm 地址初始化 (一次性)
-  # ============================================
-  ac-realm-init:
-    image: mariadb:10.11
-    container_name: acore-realm-init
-    depends_on:
-      ac-database:
-        condition: service_healthy
-      ac-worldserver:
-        condition: service_started
-    environment:
-      DB_HOST: ac-database
-      DB_USER: root
-      DB_PASS: *DB_ROOT_PASS
-      REALM_IP: *REALM_IP
-      REALM_PORT: *REALM_PORT
-    volumes:
-      - ./scripts/realm-init.sh:/realm-init.sh:ro
-    entrypoint: ["bash", "/realm-init.sh"]
-    networks:
-      - ac-network
-    restart: "no"
-
-  # ============================================
-  # 默认管理员账户创建 (一次性)
-  # ============================================
-  ac-account-init:
-    image: python:3.11-alpine
-    container_name: acore-account-init
-    depends_on:
-      ac-database:
-        condition: service_healthy
-      ac-realm-init:
-        condition: service_completed_successfully
-    environment:
-      DB_HOST: ac-database
-      DB_USER: root
-      DB_PASS: *DB_ROOT_PASS
-      DB_NAME: acore_auth
-      DEFAULT_ACCOUNT_USER: ""
-      DEFAULT_ACCOUNT_PASS: ""
-      DEFAULT_ACCOUNT_GMLEVEL: 3
-      DEFAULT_ACCOUNT_EXPANSION: 2
-    volumes:
-      - ./scripts/create-default-account.py:/create-account.py:ro
-    entrypoint: ["sh", "-c", "pip install -q pymysql && python /create-account.py"]
-    networks:
-      - ac-network
-    restart: "no"
-
-  # ============================================
-  # 认证服务器 (从 Docker Hub 拉取预构建镜像)
+  # 认证服务器 (从 Docker Hub 拉取)
+  # 启动时自动完成：Realm IP 初始化 + 默认账户创建
   # ============================================
   ac-authserver:
     image: asm0x1/wow-authserver:latest
@@ -157,20 +107,28 @@ services:
     ports:
       - "3724:3724"
     environment:
+      DB_HOST: ac-database
+      DB_USER: root
       DB_PASSWORD: *DB_ROOT_PASS
+      REALM_IP: *REALM_IP
+      REALM_PORT: *REALM_PORT
       AUTH_PORT: *AUTH_PORT
+      DEFAULT_ACCOUNT_USER: ""
+      DEFAULT_ACCOUNT_PASS: ""
+      DEFAULT_ACCOUNT_GMLEVEL: 3
+      DEFAULT_ACCOUNT_EXPANSION: 2
     volumes:
       - acore-logs:/opt/wow/logs
     depends_on:
       ac-database:
         condition: service_healthy
-      ac-realm-init:
-        condition: service_completed_successfully
+      ac-worldserver:
+        condition: service_started
     networks:
       - ac-network
 
   # ============================================
-  # Web 注册页面 (从 Docker Hub 拉取预构建镜像)
+  # Web 注册页面 (从 Docker Hub 拉取)
   # ============================================
   ac-registration:
     image: asm0x1/wow-registration:latest
@@ -182,8 +140,8 @@ services:
       REALM_IP: *REALM_IP
       REG_PORT: *REG_PORT
     depends_on:
-      ac-realm-init:
-        condition: service_completed_successfully
+      ac-authserver:
+        condition: service_started
     command: >
       sh -c "
       envsubst '$$REALM_IP' < /var/www/html/application/config/config.php > /tmp/config.php && mv /tmp/config.php /var/www/html/application/config/config.php;
