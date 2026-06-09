@@ -11,6 +11,18 @@ DB_PASSWORD="${DB_PASSWORD:-wow@asm0x1}"
 
 echo ">> [entrypoint] 初始化 worldserver 配置..."
 
+# ============================================
+# 确保数据库存在 (MariaDB 容器启动时无 init 脚本)
+# ============================================
+echo ">> [entrypoint] 创建数据库 (如不存在)..."
+mariadb -h ac-database -uroot -p"${DB_PASSWORD}" <<'EOSQL'
+CREATE DATABASE IF NOT EXISTS `acore_auth` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE DATABASE IF NOT EXISTS `acore_characters` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE DATABASE IF NOT EXISTS `acore_world` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE DATABASE IF NOT EXISTS `acore_playerbots` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+EOSQL
+echo ">> [entrypoint] 数据库检查完成"
+
 # 从模板生成实际配置
 sed "s/__DB_PASSWORD__/${DB_PASSWORD}/g" \
     /opt/wow/etc/worldserver.conf.template \

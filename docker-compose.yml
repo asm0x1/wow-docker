@@ -20,7 +20,6 @@ services:
       MARIADB_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-wow@asm0x1}
     volumes:
       - ac-database-data:/var/lib/mysql
-      - ./sql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: '/usr/bin/mariadb --user=root --password=$$MARIADB_ROOT_PASSWORD --execute "SHOW DATABASES;"'
       interval: 5s
