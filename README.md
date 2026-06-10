@@ -54,6 +54,37 @@ docker compose up -d
 内置管理员账户 `asm0x1` / `123456`（GM Level 3）始终存在。
 可在 `.env` 中配置 `DEFAULT_ACCOUNT_USER` / `DEFAULT_ACCOUNT_PASS` 添加额外管理员。
 
+## 目录结构
+
+```
+wow-docker/
+├── bin/                     # SPK 预编译二进制 (worldserver, authserver)
+├── conf/
+│   ├── dist/.env            # .env 模板（本地部署用）
+│   └── modules/             # 模块配置 (.conf.dist)
+├── data/                    # 客户端地图数据（需自行提取，~2-3GB）
+│   ├── maps/
+│   ├── dbc/
+│   ├── vmaps/
+│   ├── mmaps/
+│   └── cameras/
+├── database/                # 数据库 SQL (migrations, playerbots)
+├── lib/                     # SPK 预编译依赖库
+├── scripts/
+│   └── lua/                 # Eluna Lua 脚本（热加载）
+├── sql/init/                # 数据库初始化 SQL
+├── WoWRegistration/         # Web 注册页面 (WoWSimpleRegistration)
+├── Dockerfile.*             # Docker 镜像构建文件
+├── docker-compose.yml       # 本地部署 Compose 文件
+├── nas/
+│   ├── docker-compose.yml   # NAS 部署 Compose 文件
+│   ├── .env.dist            # NAS .env 模板
+│   └── 部署说明.md          # NAS 部署详细说明
+└── entrypoint-*.sh          # 容器入口脚本
+```
+
+> `data/` 目录需要从魔兽世界 3.3.5a 客户端提取。使用 [AzerothCore 地图提取工具](https://www.azerothcore.org/wiki/client-setup) 或 `bin/` 目录下的 `mapextractor` / `vmap4extractor` 等工具生成，然后放入对应子目录。
+
 ## 服务架构
 
 ```
