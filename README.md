@@ -27,7 +27,7 @@
 
 ```bash
 # 1. 复制 .env 模板并编辑
-cp conf/dist/.env .env
+cp .env.dist .env
 # 改 REALM_IP 为你本机 IP
 #   macOS:  ipconfig getifaddr en0
 #   Linux:  hostname -I
@@ -59,9 +59,7 @@ docker compose up -d
 ```
 wow-docker/
 ├── bin/                     # SPK 预编译二进制 (worldserver, authserver)
-├── conf/
-│   ├── dist/.env            # .env 模板（本地部署用）
-│   └── modules/             # 模块配置 (.conf.dist)
+├── conf/modules/            # 模块配置 (.conf.dist)
 ├── data/                    # 客户端地图数据（需自行提取，~2-3GB）
 │   ├── maps/
 │   ├── dbc/
@@ -70,30 +68,28 @@ wow-docker/
 │   └── cameras/
 ├── database/                # 数据库 SQL (migrations, playerbots)
 ├── lib/                     # SPK 预编译依赖库
-├── scripts/
-│   └── lua/                 # Eluna Lua 脚本（热加载）
+├── scripts/lua/             # Eluna Lua 脚本（热加载）
+│   └── extensions/          # Eluna 扩展库
 ├── sql/init/                # 数据库初始化 SQL
 ├── WoWRegistration/         # Web 注册页面 (WoWSimpleRegistration)
+├── .env.dist                # .env 模板（本地部署用）
 ├── Dockerfile.*             # Docker 镜像构建文件
 ├── docker-compose.yml       # 本地部署 Compose 文件
-├── nas/
-│   ├── docker-compose.yml   # NAS 部署 Compose 文件
-│   ├── .env.dist            # NAS .env 模板
-│   └── 部署说明.md          # NAS 部署详细说明
-└── entrypoint-*.sh          # 容器入口脚本
+├── entrypoint-*.sh          # 容器入口脚本
+└── nas/
+    ├── docker-compose.yml   # NAS 部署 Compose 文件
+    └── 部署说明.md          # NAS 部署详细说明（含配置模板）
 ```
 
-> `data/` 目录需要从魔兽世界 3.3.5a 客户端提取。使用 [AzerothCore 地图提取工具](https://www.azerothcore.org/wiki/client-setup) 或 `bin/` 目录下的 `mapextractor` / `vmap4extractor` 等工具生成，然后放入对应子目录。
+> `data/` 目录需要从魔兽世界 3.3.5a 客户端提取。使用 [AzerothCore 地图提取工具](https://www.azerothcore.org/wiki/client-setup) 生成 maps/dbc/vmaps/mmaps/cameras，放入对应子目录。
 
 ## 服务架构
 
 ```
 ac-database (MariaDB 10.11)
-  ├─► ac-worldserver (数据库迁移 + 游戏世界)
-  │     └─► ac-realm-init (一次性：更新 realmlist 地址/端口)
-  │           ├─► ac-authserver (认证服务器)
-  │           ├─► ac-registration (Web 注册，PHP 8.2 + WoWSimpleRegistration)
-  │           └─► ac-account-init (一次性：SRP6 创建默认管理员)
+  ├─► ac-worldserver (建库 + 迁移 + playerbots 初始化 + 游戏世界)
+  ├─► ac-authserver (realm 初始化 → 管理员账户创建 → 认证服务启动)
+  │     └─► ac-registration (Web 注册，PHP 8.2 + WoWSimpleRegistration)
   └─► phpmyadmin (可选，--profile management)
 ```
 
@@ -109,6 +105,7 @@ ac-database (MariaDB 10.11)
 | DOCKER_WORLD_EXTERNAL_PORT | 8085 | 世界服务器端口 |
 | DOCKER_AUTH_EXTERNAL_PORT | 3724 | 认证服务器端口 |
 | DOCKER_REGISTRATION_EXTERNAL_PORT | 8765 | Web 注册页面端口 |
+| DOCKER_SOAP_EXTERNAL_PORT | 7878 | SOAP 远程管理端口 |
 | DOCKER_DB_EXTERNAL_PORT | 63306 | MariaDB 外部端口 |
 | DOCKER_DB_ROOT_PASSWORD | wow@asm0x1 | MariaDB root 密码 |
 | BOT_MIN_COUNT | 15 | 最少在线假人数量 |
@@ -346,7 +343,7 @@ $config['smtp_mail'] = 'your-account@gmail.com';
 - **非源码编译**：`bin/` 和 `lib/` 是预编译的 SPK 二进制，修改服务端行为需改配置或 Lua 脚本。
 - **首次启动**：worldserver 需要执行数据库迁移，请耐心等待 1-2 分钟。
 - **NAS 部署**：使用 `nas/docker-compose.yml`，镜像从 Docker Hub 拉取（`asm0x1/wow-worldserver` 等），无需本地构建。配置在 YAML 文件顶部用锚点定义，改一处即可。
-- **`.env` 已 gitignore**：本地部署使用 `conf/dist/.env` 模板。
+- **`.env` 已 gitignore**：本地部署使用 `.env.dist` 模板。
 
 ## Docker Hub 镜像
 
