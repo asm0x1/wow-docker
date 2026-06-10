@@ -28,8 +28,7 @@ RUN ln -sf /opt/wow/etc /var/packages/WoWServer/target/etc && \
     ln -sf /opt/wow/database /var/packages/WoWServer/target/database && \
     chown -Rh wow:wow /opt/wow /var/packages/WoWServer
 
-# 初始化脚本（realm IP + 默认账户创建）
-COPY scripts/realm-init.sh /opt/wow/realm-init.sh
+# 初始化脚本（默认账户创建；realm IP 初始化已内置 entrypoint）
 COPY scripts/create-default-account.py /opt/wow/create-account.py
 
 COPY entrypoint-authserver.sh /opt/wow/entrypoint.sh

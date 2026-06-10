@@ -45,10 +45,8 @@ docker push asm0x1/wow-registration:latest
 ```
 ac-database (MariaDB 10.11, healthcheck: alive)
     ├─► ac-worldserver (creates DBs, runs migrations, playerbots SQL, then game loop)
-    │       └─► ac-realm-init (one-shot: updates realmlist IP/port from REALM_IP, then exits)
-    │               ├─► ac-authserver (starts after realm-init succeeds)
-    │               ├─► ac-registration (PHP 8.2 Apache + WoWSimpleRegistration)
-    │               └─► ac-account-init (one-shot: creates admin account via SRP6)
+    ├─► ac-authserver (realm IP init → admin account creation → starts authserver)
+    │       └─► ac-registration (PHP 8.2 Apache + WoWSimpleRegistration)
     └─► phpmyadmin (optional, `--profile management`)
 ```
 
@@ -83,7 +81,7 @@ if [ -f /env ]; then
 fi
 ```
 
-This pattern is used in `scripts/realm-init.sh` and the `ac-registration` command. Services mount `.env` as `/env:ro`.
+This pattern is used in `entrypoint-authserver.sh` and the `ac-registration` command. Services mount `.env` as `/env:ro`.
 
 ### Module System
 
@@ -91,16 +89,15 @@ Game server modules in `conf/modules/` use `.conf.dist` template files with `__B
 
 ### Realm IP Initialization
 
-`ac-realm-init` is a one-shot `mariadb:10.11` container that:
-1. Sources `/env` if available (NAS compatibility)
-2. Waits for `acore_auth.realmlist` table (created by worldserver migrations)
-3. Updates the address/port via SQL `UPDATE realmlist SET address=..., port=...`
+Handled inside `ac-authserver`'s entrypoint (`entrypoint-authserver.sh`):
+1. Waits for `acore_auth.realmlist` table (created by worldserver migrations)
+2. Updates the address/port via SQL `UPDATE realmlist SET address=..., port=...`
 
-Variables support dual naming: `DB_PASS`/`DOCKER_DB_ROOT_PASSWORD`, `REALM_PORT`/`DOCKER_WORLD_EXTERNAL_PORT`.
+Variables used: `REALM_IP`, `REALM_PORT`.
 
 ### Default Admin Account Creation
 
-`ac-account-init` is a one-shot `python:3.11-alpine` container that computes SRP6 salt/verifier and inserts accounts into `acore_auth.account`. Built-in account `asm0x1`/`123456` (GM 3) is always created. Optional custom admin from `DEFAULT_ACCOUNT_USER`/`DEFAULT_ACCOUNT_PASS` env vars.
+Handled inside `ac-authserver`'s entrypoint via `create-account.py` — computes SRP6 salt/verifier and inserts accounts into `acore_auth.account`. Built-in account `asm0x1`/`123456` (GM 3) is always created. Optional custom admin from `DEFAULT_ACCOUNT_USER`/`DEFAULT_ACCOUNT_PASS` env vars.
 
 ## Two Compose Files
 
@@ -111,7 +108,7 @@ Variables support dual naming: `DB_PASS`/`DOCKER_DB_ROOT_PASSWORD`, `REALM_PORT`
 
 Key differences in `nas/docker-compose.yml`:
 - Uses `image: asm0x1/wow-*:latest` instead of `build:`
-- Mounts `./.env:/env:ro` on services that need runtime env (realm-init, registration)
+- Mounts `./.env:/env:ro` on services that need runtime env (registration)
 - No source code/data mounts except `./data` (client maps)
 - No `database/`, `conf/modules/`, or `scripts/lua/` mounts (baked into images)
 - `ac-registration` `command:` sources `/env` at runtime then runs `envsubst` for REALM_IP
@@ -140,5 +137,5 @@ Key differences in `nas/docker-compose.yml`:
 - **No test suite**: Infrastructure/deployment repo. CI validates Docker Compose startup flow only.
 - **Apple Silicon**: x86_64 binaries require `DOCKER_DEFAULT_PLATFORM=linux/amd64`. Runs under emulation.
 - **`.env` is gitignored**: Users create from `conf/dist/.env` (local) or `nas/.env.dist` (NAS).
-- **Worldserver must start first**: Runs DB migrations, creating tables that authserver and realm-init depend on.
+- **Worldserver must start first**: Runs DB migrations, creating tables that authserver depends on.
 - **NAS `.env` not auto-read by Compose**: UGREEN Docker UI may not apply `.env` to Compose variable substitution. The runtime sourcing pattern (`/env` mount + `[ -f /env ] && . /env`) is the workaround.
