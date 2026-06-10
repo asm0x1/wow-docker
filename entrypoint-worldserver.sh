@@ -50,6 +50,19 @@ for template in /opt/wow/etc/modules/*.conf.dist; do
 done
 
 # ============================================
+# 修复没有路径点的生物（MovementType=2 → 随机移动）
+# 确保所有 waypoint 生物都有对应数据，否则改为随机移动
+# ============================================
+echo ">> [entrypoint] 检查并修复缺失路径点的生物..."
+mariadb -h ac-database -uroot -p"${DB_PASSWORD}" acore_world <<'EOSQL'
+UPDATE creature c
+LEFT JOIN waypoint_data w ON c.id1 = w.id
+SET c.MovementType = 1, c.wander_distance = 5
+WHERE c.MovementType = 2 AND w.id IS NULL;
+EOSQL
+echo ">> [entrypoint] 路径点检查完成"
+
+# ============================================
 # 导入 Playerbots 数据库基础表结构
 # 原 SPK 预装了 MariaDB 数据目录，Docker 需要手动处理
 # ============================================
